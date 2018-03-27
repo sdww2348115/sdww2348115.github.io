@@ -28,7 +28,7 @@ AQS对于多线程竞争临界区资源的实现主要依靠队列``sync queue``
 ```java
 static final class Node {
 
-		/*********** waitStatus 相关 *************/
+        /*********** waitStatus 相关 *************/
         //waitStatus 状态，代表该Node被取消
         static final int CANCELLED =  1;
         //waitStatus 状态，代表该节点的后续节点等待该节点完成
@@ -37,37 +37,37 @@ static final class Node {
         static final int CONDITION = -2;
         //waitStatus 状态，代表当唤醒该节点时，还要唤醒后续节点
         static final int PROPAGATE = -3;
-		//标识当前Node所处状态
+        //标识当前Node所处状态
         volatile int waitStatus;
-
-		/*********** prev/next 相关 *************/
+        
+        /*********** prev/next 相关 *************/
         //指向queue中前一个节点
         volatile Node prev;
-		//指向queue中后一个节点
+        //指向queue中后一个节点
         volatile Node next;
-		
-		//返回该节点的前驱节点
-		final Node predecessor() throws NullPointerException {
+        
+        //返回该节点的前驱节点
+        final Node predecessor() throws NullPointerException {
             Node p = prev;
             if (p == null)
                 throw new NullPointerException();
             else
                 return p;
         }
-
-		/*********** 该Node所包装的thread *************/
+        
+        /*********** 该Node所包装的thread *************/
         volatile Thread thread;
-
-		/*********** nextWaiter 相关 *************/
-		//仅用于sync queue，代表Node为共享式
+        
+        /*********** nextWaiter 相关 *************/
+        //仅用于sync queue，代表Node为共享式
         static final Node SHARED = new Node();
         //仅用于sync queue，代表Node为独占式
         static final Node EXCLUSIVE = null;
-		//nextWaiter在不同的queue中有不同的含义
-		// 1.在sync queue中，它保存的是Node的状态(独占/共享)
-		// 2.在condition queue中，它保存的是下一个Node的引用
+        //nextWaiter在不同的queue中有不同的含义
+        // 1.在sync queue中，它保存的是Node的状态(独占/共享)
+        // 2.在condition queue中，它保存的是下一个Node的引用
         Node nextWaiter;
-
+        
         //返回sync queue中该Node是否为共享模式
         final boolean isShared() {
             return nextWaiter == SHARED;
