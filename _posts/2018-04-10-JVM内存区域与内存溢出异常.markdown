@@ -1,1 +1,1 @@
----layout: posttitle:  "JVM内存区域与内存溢出异常"categories: jvmpermalink: /jvm/memory---# JVM内存区域与内存溢出异常
+---layout: posttitle:  "JVM memory"categories: jvmpermalink: /jvm/memory---# JVM内存区域与内存溢出异常
