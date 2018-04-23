@@ -130,3 +130,10 @@ Serial Old就是Serial收集器的老年代版本，它同样是一个单线程�
 * 核心算法：标记整理算法，单线程执行
 * 优势：参考上面的两大用途
 * 缺点：单线程执行，效率较低
+
+### Parallel Old收集器
+Parallel Old是Parallel Scavenge 收集器的老年代版本，使用多线程和"标记-整理"算法。该收集器是在JDK1.6版本中才开始提供。该垃圾收集器最主要的用途是：解决Serial Old（PS MarkSweep）作为Parallel Scavenge老年代收集器所造成的的瓶颈问题.由于单线程的老年代Serial Old性能的拖累，使用了Parallel Scavenge的收集器不能在整体应用上达到吞吐量最大化的效果。
+
+* 适用区域：老年代
+* 核心算法：标记整理算法，与Parallel类似，多线程并行执行
+* 优势：解决了Serial Old的性能瓶颈问题，让Parallel Scavenge收集器成为了真正意义上的吞吐量优先收集器
