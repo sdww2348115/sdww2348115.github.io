@@ -154,3 +154,25 @@ CMS（Concurrent Mark Sweep）收集器是一种以获取`最短回收停顿时�
 1. 由于是并发标记，CMS对CPU的资源非常敏感，它会耗费大量的CPU资源用于并发标记过程。
 2. CMS收集器无法处理浮动垃圾。在重新标记阶段，CMS收集器将对之前已经标记的对象进行重新标记，并发标记阶段所产生的垃圾仍可得到回收。但是对于并发清理阶段程序运行所产生的垃圾，CMS收集器将无法得到正常回收。这部分垃圾被称为"浮动垃圾"。
 3. CMS是一款基于"标记-清除"算法的收集器，这意味着收集结束时会产生大量的空间碎片。往往会出现老年代空闲空间还很大，但却无法找到足够大的连续空间来分配当前对象。这会触发一次Full GC--即使用Serial Old收集器对老年代进行垃圾收集。
+
+### G1收集器
+` The Garbage-First (G1) collector is a server-style garbage collector, targeted for multi-processor machines with large memories. It meets garbage collection (GC) pause time goals with a high probability, while achieving high throughput. The G1 garbage collector is fully supported in Oracle JDK 7 update 4 and later releases. The G1 collector is designed for applications that:   
+1.Can operate concurrently with applications threads like the CMS collector.
+2.Compact free space without lengthy GC induced pause times.
+3.Need more predictable GC pause durations.
+4.Do not want to sacrifice a lot of throughput performance.
+5.Do not require a much larger Java heap. `
+G1是一种服务器端的垃圾收集器，应用在多处理器和大容量内存环境中，在实现高吞吐量的同时，尽可能的满足垃圾收集暂停时间的要求。它具有以下特性：
+
+* 像CMS收集器一样， 能与应用程序线程并发执行。
+* 整理空闲空间更快。
+* 可预测GC的停顿时间。
+* 更高的吞吐量。
+* 更高的JVM堆利用率。
+
+G1收集器的设计目标是取代CMS收集器，它同CMS相比，在以下方面表现的更出色：
+
+* G1是一个有整理内存过程的垃圾收集器，不会产生很多内存碎片。
+* G1的Stop The World(STW)更可控，G1在停顿时间上添加了预测机制，用户可以指定期望停顿时间。（基于统计）
+
+所以，G1收集器又被认为是驾驭一切的垃圾收集器。
