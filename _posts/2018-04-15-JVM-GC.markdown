@@ -176,3 +176,10 @@ G1收集器的设计目标是取代CMS收集器，它同CMS相比，在以下方
 * G1的Stop The World(STW)更可控，G1在停顿时间上添加了预测机制，用户可以指定期望停顿时间。（基于统计）
 
 所以，G1收集器又被认为是驾驭一切的垃圾收集器。
+
+#### Region
+G1将新生代，老年代的物理空间划分取消了。
+![forget-gen](../resources/img/forget-gen.png)
+
+G1的各代存储地址是不连续的，每一代都使用了n个不连续的大小相同的Region，每个Region占有一块连续的虚拟内存地址。G1中的Region分为四种，除了Eden、Survivor、Old以外，额外添加了Humongous：表示这些Region存储的是巨大对象（humongous object，H-obj），即大小大于等于region一半的对象。如果一个对象占用的空间超过了分区容量50%以上，G1收集器就认为这是一个巨型对象。这些巨型对象，默认直接会被分配在年老代，但是如果它是一个短期存在的巨型对象，就会对垃圾收集器造成负面影响。为了解决这个问题，G1划分了一个Humongous区，它用来专门存放巨型对象。如果一个H区装不下一个巨型对象，那么G1会寻找连续的H分区来存储。H区域可以被认为是特殊的Old Gen。
+![G1-model](../resources/img/G1-model.png)
