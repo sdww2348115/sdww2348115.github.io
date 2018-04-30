@@ -184,3 +184,10 @@ G1将新生代，老年代的物理空间划分取消了。
 
 G1的各代存储地址是不连续的，每一代都使用了n个不连续的大小相同的Region，每个Region占有一块连续的虚拟内存地址。G1中的Region分为四种，除了Eden、Survivor、Old以外，额外添加了Humongous：表示这些Region存储的是巨大对象（humongous object，H-obj），即大小大于等于region一半的对象。如果一个对象占用的空间超过了分区容量50%以上，G1收集器就认为这是一个巨型对象。这些巨型对象，默认直接会被分配在年老代，但是如果它是一个短期存在的巨型对象，就会对垃圾收集器造成负面影响。为了解决这个问题，G1划分了一个Humongous区，它用来专门存放巨型对象。如果一个H区装不下一个巨型对象，那么G1会寻找连续的H分区来存储。H区域可以被认为是特殊的Old Gen。
 ![G1-model](../resources/img/G1-model.png)
+
+#### Young GC
+Young GC主要是对Eden区进行GC，它在Eden空间耗尽时会被触发。与一般的GC相同，它的Young GC也是基于标记-复制算法。将Eden中存活的对象复制到Survivor中，如果Survivor空间不足，则直接晋升至Old中。    
+Young GC的整个过程都是STW的，一般通过限制Eden Region的个数（内存大小）来控制其GC时间。具体收集过程如下图所示：
+![G1-YoungGC-1](../resources/img/G1-YoungGC-1.png)
+
+![G1-YoungGC-1](../resources/img/G1-YoungGC-2.png)
