@@ -161,7 +161,7 @@ CMS（Concurrent Mark Sweep）收集器是一种以获取`最短回收停顿时�
 2.Compact free space without lengthy GC induced pause times.
 3.Need more predictable GC pause durations.
 4.Do not want to sacrifice a lot of throughput performance.
-5.Do not require a much larger Java heap. `
+5.Do not require a much larger Java heap. `    
 
 G1是一种服务器端的垃圾收集器，应用在多处理器和大容量内存环境中，在实现高吞吐量的同时，尽可能的满足垃圾收集暂停时间的要求。它具有以下特性：
 
