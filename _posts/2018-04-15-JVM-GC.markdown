@@ -206,7 +206,21 @@ Young GC的整个过程都是STW的，一般通过限制Eden Region的个数（�
 因此，整个Young GC过程如下：
 
  1. 根扫描：静态和本地对象被扫描
- 2. 更新RS：处理dirty card队列更新RS
- 3. 处理RS：检测从年轻代指向年老代的对象
- 4. 对象拷贝：并发拷贝存活的对象到survivor/old区域
- 5. 处理引用队列：软引用，弱引用，虚引用处理
+ 2. 处理RS：根据RS标记对象
+ 3. 对象拷贝：并发拷贝存活的对象到survivor/old区域
+ 4. 处理引用队列：软引用，弱引用，虚引用处理
+
+#### Mix GC
+Mix GC不仅进行正常的新生代垃圾收集，同时也回收部分后台扫描线程标记的老年代分区。
+
+它的GC步骤分2步，且这两部分可以相对独立的执行：
+
+ 1. 全局并发标记（global concurrent marking）
+ 2. 拷贝存活对象（evacuation）
+
+在G1 GC中，global concurrent marking主要是为Mixed GC提供标记服务的，并不是一次GC过程的一个必须环节。global concurrent marking的执行过程分为四个步骤：
+ 
+ 1. 初始标记（initial marking）：``暂停阶段``。扫描根集合，标记所有从根集合可直接到达的对象并将它们的字段压入扫描栈（marking stack）中等到后续扫描。G1使用外部的bitmap来记录mark信息，而不使用对象头的mark word里的mark bit。在分代式G1模式中，初始标记阶段借用young GC的暂停，因而没有额外的、单独的暂停阶段。
+ 2. 并发标记（concurrent marking）：``并发阶段``。不断从扫描栈取出引用递归扫描整个堆里的对象图。每扫描到一个对象就会对其标记，并将其字段压入扫描栈。重复扫描过程直到扫描栈清空。过程中还会扫描SATB write barrier所记录下的引用。
+ 3. 最终标记（final marking，在实现中也叫remarking）：``暂停阶段``。在完成并发标记后，每个Java线程还会有一些剩下的SATB write barrier记录的引用尚未处理。这个阶段就负责把剩下的引用处理完。同时这个阶段也进行弱引用处理（reference processing）。 一般来说G1的final marking比起CMS来说要快得多。
+ 4. 清理（cleanup）：``暂停阶段``。清点和重置标记状态。这个阶段有点像mark-sweep中的sweep阶段，不过不是在堆上sweep实际对象，而是在marking bitmap里统计每个region被标记为活的对象有多少。这个阶段如果发现完全没有活对象的region就会将其整体回收到可分配region列表中。 
