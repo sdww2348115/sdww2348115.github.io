@@ -191,3 +191,11 @@ Young GC的整个过程都是STW的，一般通过限制Eden Region的个数（�
 ![G1-YoungGC-1](../resources/img/G1-YoungGC-1.png)
 
 ![G1-YoungGC-1](../resources/img/G1-YoungGC-2.png)
+
+在仅进行Young GC的时候，如何判定哪些对象应该被回收，哪些应该保留呢？理论上讲，除了普通的GC Roots之外，所有被老年代对象所持有的引用的新生代对象都应被保留下来。那么，如何找到这些对象呢？扫描整个老年代吗？这样所带来的的时间开销是不可忍受的。JVM在此处采用了Remember Set与Card Table技术，采用空间换时间的方式大大减少了标记所需的时间。
+
+ * `RememberSet`是在实现部分垃圾收集（partial GC）时用于记录从非收集部分指向收集部分的指针的集合的抽象数据结构。
+ * `CardTable`是remembered set的一种实现方式
+
+用card table实现的remembered set通常是points-out的，也就是说card table要记录的是从它覆盖的范围出发指向别的范围的指针。 G1 GC则是在points-out的card table之上再加了一层结构来构成points-into RSet：每个region会记录下到底哪些别的region有指向自己的指针，而这些指针分别在哪些card的范围内。 
+这个RSet其实是一个hash table，key是别的region的起始地址，value是一个集合，里面的元素是card table的index。 举例来说，如果region A的RSet里有一项的key是region B，value里有index为1234的card，它的意思就是region B的一个card里有引用指向region A。所以对region A来说，该RSet记录的是points-into的关系；而card table仍然记录了points-out的关系。 
