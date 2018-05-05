@@ -170,7 +170,7 @@ Mix GC的Evacuation过程如下图：
 经过多个版本的优化与改进，G1垃圾收集器技术目前已经非常成熟，CMS垃圾收集器与Parallel Scavenge垃圾收集器所存在的意义已经很小了。Oracle JDK1.9版本之后的默认收集器就是G1。在可预见的将来，G1将成为JVM垃圾收集器事实上的标准。
 
 ## References
-[1][深入理解 Java G1 垃圾收集器](http://blog.jobbole.com/109170/)
-[2][Java Hotspot G1 GC的一些关键技术](https://zhuanlan.zhihu.com/p/22591838)
-[3][ [HotSpot VM] 请教G1算法的原理](http://hllvm.group.iteye.com/group/topic/44381)
+[1][深入理解 Java G1 垃圾收集器](http://blog.jobbole.com/109170/)    
+[2][Java Hotspot G1 GC的一些关键技术](https://zhuanlan.zhihu.com/p/22591838)    
+[3][ [HotSpot VM] 请教G1算法的原理](http://hllvm.group.iteye.com/group/topic/44381)    
 [4][ [HotSpot VM] 关于incremental update与SATB的一点理解](http://hllvm.group.iteye.com/group/topic/44529)
