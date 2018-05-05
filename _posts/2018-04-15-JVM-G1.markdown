@@ -172,5 +172,5 @@ Mix GC的Evacuation过程如下图：
 ## References
 [1][深入理解 Java G1 垃圾收集器](http://blog.jobbole.com/109170/)    
 [2][Java Hotspot G1 GC的一些关键技术](https://zhuanlan.zhihu.com/p/22591838)    
-[3][ [HotSpot VM] 请教G1算法的原理](http://hllvm.group.iteye.com/group/topic/44381)    
-[4][ [HotSpot VM] 关于incremental update与SATB的一点理解](http://hllvm.group.iteye.com/group/topic/44529)
+[3][[HotSpot VM] 请教G1算法的原理](http://hllvm.group.iteye.com/group/topic/44381)    
+[4][[HotSpot VM] 关于incremental update与SATB的一点理解](http://hllvm.group.iteye.com/group/topic/44529)
