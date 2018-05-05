@@ -62,10 +62,10 @@ davg.to_i＃=> 44
 设定最近一次的历史记录权重为30%，过去所有历史记录的衰减平均值的权重为70%，最终可以得到衰减平均值。通过以这种方式进行计算，可以减少较早历史数据对于平均值的影响。
 
 为了让它更直观一些，我们来考虑一个例子，其中有十个历史记录和一个单独的评分。然后，在算术平均值的情况下，平均值如下图所示变化。
-![avg_shift](../resources/img/avg_shift.png)
+![avg-shift](../resources/img/avg-shift.png)
 
 另一方面，在衰减平均值的情况下，其变化下图所示。
-![davg_shift](../resources/img/davg_shift.png)
+![davg-shift](../resources/img/davg-shift.png)
 
 越早的数据在平均值中所占的比例越低，最新的值总是能占平均值权重的30%。
 
