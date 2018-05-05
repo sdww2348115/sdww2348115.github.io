@@ -145,12 +145,7 @@ Evacuation阶段可以自由选择任意多个region来独立收集构成收集�
 
 在选定CSet后，Evacuation其实就跟ParallelScavenge的young GC的算法类似，采用并行copying（或者叫scavenging）算法把CSet里每个region里的活对象拷贝到新的region里，整个过程完全暂停。从这个意义上说，G1的evacuation跟传统的mark-compact算法的compaction完全不同：前者会自己从根集合遍历对象图来判定对象的生死，不需要依赖global concurrent marking的结果，有就用，没有拉倒；而后者则依赖于之前的mark阶段对对象生死的判定。
 
-CSet的选定有两个原则：
-
-1. 根据统计模型，从收益最高的选起
-2. 选取的CSet收集预估时间不超过用户指定上限
-
-G1在选取CSet时，采用了一种基于统计的预测模型用于预测清理耗时，停顿预测模型是以衰减标准差为理论基础实现的。
+CSet的选定根据[停止预测模型](./g1/PausePredictionModel)统计计算出来的历史数据来预测本次收集需要选择的Region数量，从而尽量满足用户设定的目标停顿时间。
 
 Mix GC的Evacuation过程如下图：
 
