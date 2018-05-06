@@ -109,3 +109,44 @@ dvar.to_i＃=> 40
 `注：上述专业名词都是我乱翻译的，懂意思就好`
 
 ## 历史记录实现
+让我们看看实现方式。历史记录保存在G1CollectorPolicy的成员变量中，如下所示。
+``` cpp
+//share/vm/gc_implementation/g1/g1CollectorPolicy.hpp
+
+86：class G1CollectorPolicy：public CollectorPolicy {
+
+150：TruncatedSeq* _concurrent_mark_init_times_ms;
+151：TruncatedSeq* _concurrent_mark_remark_times_ms;
+152：TruncatedSeq* _concurrent_mark_cleanup_times_ms;
+```
+
+TruncatedSeq是一个继承AbsSeq的类。让我们看看添加历史记录的add（）成员函数。
+``` cpp
+//share/vm/utilities/numberSeq.cpp
+
+36：void AbsSeq :: add（double val）{
+37：if（_num == 0）{
+39：_davg = val;
+41：_dvariance = 0.0;
+42：} else {
+44：_davg =（1.0  -  _alpha）* val + _alpha * _davg;
+45：double diff = val  -  _davg;
+46：_dvariance =（1.0  -  _alpha）* diff * diff + _alpha * _dvariance;
+47：}
+48：}
+```
+
+_davg是衰减平均值，_davariance是衰减离差。_alpha的默认值是0.7。也就是说，您正在执行的处理与清单12.6中的处理相同。每次将数据添加到历史记录时，都会计算上述成员变量。
+
+让我们看看我们实际将数据添加到历史记录的位置。例如，并发标记的初始标记阶段添加了以下成员函数：
+``` cpp
+//share/vm/gc_implementation/g1/g1CollectorPolicy.cpp
+954：void G1 CollectorPolicy :: record_concurrent_mark_init_end（）{
+955：double end_time_sec = os :: elapsedTime（）;
+956：double elapsed_time_ms =（end_time_sec  -  _mark_init_start_sec）* 1000.0;
+957：_concurrent_mark_init_times_ms  - > add（elapsed_time_ms）;
+
+961：}
+```
+
+第956行查找初始标记阶段的停止时间，并将该时间添加到第957行的TruncatedSeq。
