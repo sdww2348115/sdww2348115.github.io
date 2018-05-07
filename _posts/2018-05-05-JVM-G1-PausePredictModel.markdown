@@ -108,32 +108,30 @@ dvar.to_i＃=> 40
 
 `注：上述专业名词都是我乱翻译的，懂意思就好`
 
-## 历史记录实现
+### 历史记录实现
 让我们看看实现方式。历史记录保存在G1CollectorPolicy的成员变量中，如下所示。
 ``` cpp
 //share/vm/gc_implementation/g1/g1CollectorPolicy.hpp
+86: class G1CollectorPolicy: public CollectorPolicy {
 
-86：class G1CollectorPolicy：public CollectorPolicy {
-
-150：TruncatedSeq* _concurrent_mark_init_times_ms;
-151：TruncatedSeq* _concurrent_mark_remark_times_ms;
-152：TruncatedSeq* _concurrent_mark_cleanup_times_ms;
+150:   TruncatedSeq* _concurrent_mark_init_times_ms;
+151:   TruncatedSeq* _concurrent_mark_remark_times_ms;
+152:   TruncatedSeq* _concurrent_mark_cleanup_times_ms;
 ```
 
 TruncatedSeq是一个继承AbsSeq的类。让我们看看添加历史记录的add（）成员函数。
 ``` cpp
 //share/vm/utilities/numberSeq.cpp
-
-36：void AbsSeq :: add（double val）{
-37：if（_num == 0）{
-39：_davg = val;
-41：_dvariance = 0.0;
-42：} else {
-44：_davg =（1.0  -  _alpha）* val + _alpha * _davg;
-45：double diff = val  -  _davg;
-46：_dvariance =（1.0  -  _alpha）* diff * diff + _alpha * _dvariance;
-47：}
-48：}
+36: void AbsSeq::add(double val) {
+37:   if (_num == 0) {
+39:     _davg = val;
+41:     _dvariance = 0.0;
+42:   } else {
+44:     _davg = (1.0 - _alpha) * val + _alpha * _davg;
+45:     double diff = val - _davg;
+46:     _dvariance = (1.0 - _alpha) * diff * diff + _alpha * _dvariance;
+47:   }
+48: }
 ```
 
 _davg是衰减平均值，_davariance是衰减离差。_alpha的默认值是0.7。也就是说，您正在执行的处理与清单12.6中的处理相同。每次将数据添加到历史记录时，都会计算上述成员变量。
@@ -141,12 +139,12 @@ _davg是衰减平均值，_davariance是衰减离差。_alpha的默认值是0.7�
 让我们看看我们实际将数据添加到历史记录的位置。例如，并发标记的初始标记阶段添加了以下成员函数：
 ``` cpp
 //share/vm/gc_implementation/g1/g1CollectorPolicy.cpp
-954：void G1 CollectorPolicy :: record_concurrent_mark_init_end（）{
-955：double end_time_sec = os :: elapsedTime（）;
-956：double elapsed_time_ms =（end_time_sec  -  _mark_init_start_sec）* 1000.0;
-957：_concurrent_mark_init_times_ms  - > add（elapsed_time_ms）;
+954: void G1CollectorPolicy::record_concurrent_mark_init_end() {
+955:   double end_time_sec = os::elapsedTime();
+956:   double elapsed_time_ms = (end_time_sec - _mark_init_start_sec) * 1000.0;
+957:   _concurrent_mark_init_times_ms->add(elapsed_time_ms);
 
-961：}
+961: }
 ```
 
 第956行查找初始标记阶段的停止时间，并将该时间添加到第957行的TruncatedSeq。
@@ -155,19 +153,19 @@ _davg是衰减平均值，_davariance是衰减离差。_alpha的默认值是0.7�
 下面看看获取预测值的部分的处理。查找初始标记阶段的预测值的成员函数如下所示。
 ``` cpp
 //share/vm/gc_implementation/g1/g1CollectorPolicy.hpp
-536：double predict_init_time_ms(){
-537：return get_new_prediction(_concurrent_mark_init_times_ms);
-538：}
+536:   double predict_init_time_ms() {
+537:     return get_new_prediction(_concurrent_mark_init_times_ms);
+538:   }
 ```
 
 537行的get_new_prediction()通过_concurrent_mark_init_times_ms传递成员变量，返回预测值。
 get_new_prediction()的定义如下
 ``` cpp
 //share/vm/gc_implementation/g1/g1CollectorPolicy.hpp
-342：double get_new_prediction（TruncatedSeq * seq）{
-343：return MAX 2（seq  -> davg（）+ sigma（）* seq  -> dsd（），
-344：seq  -> davg（）* confidence_factor（seq  -> num（）））;
-345：}
+342:   double get_new_prediction(TruncatedSeq* seq) {
+343:     return MAX2(seq->davg() + sigma() * seq->dsd(),
+344:                 seq->davg() * confidence_factor(seq->num()));
+345:   }
 ```
 
 MAX2（）是一个比较参数并返回大数的函数。当历史记录不足时，采用344行的方式进行处理，，因此将省略其解释，并且将仅解释343行处的处理。
@@ -179,17 +177,20 @@ davg（）返回衰减平均值。sigma（）是可靠性。dsd（）返回衰�
 
 我们将以最后的并行标记阶段为例。
 ``` cpp
-//share/vm/gc_implementation/g1/concurrentMarkThread.cpp
 93: void ConcurrentMarkThread::run() {
-152:double now = os::elapsedTime();
-153:double remark_prediction_ms = g1_policy->predict_remark_time_ms();
-154:jlong sleep_time_ms = mmu_tracker->when_ms(now, remark_prediction_ms);
-155:os::sleep(current_thread, sleep_time_ms, false);
-/*执行最终标记阶段*/ 
-165:CMCheckpointRootsFinalClosure final_cl(_cm);
-166:sprintf(verbose_str, "GC remark");
-167:VM_CGC_Operation op(&final_cl, verbose_str);
-168:VMThread::execute(&op);
+
+152:             double now = os::elapsedTime();
+153:             double remark_prediction_ms =
+                   g1_policy->predict_remark_time_ms();
+154:             jlong sleep_time_ms =
+                   mmu_tracker->when_ms(now, remark_prediction_ms);
+155:             os::sleep(current_thread, sleep_time_ms, false);
+
+               /* 执行最终标记阶段*/
+165:           CMCheckpointRootsFinalClosure final_cl(_cm);
+166:           sprintf(verbose_str, "GC remark");
+167:           VM_CGC_Operation op(&final_cl, verbose_str);
+168:           VMThread::execute(&op);
 ```
 
 第152行的os::elapsedTime()是一个静态成员函数，用于返回自HotspotVM启动以来经过的时间。第153行的predict_remark_time_ms()获取将要发生的最后一个标记阶段的时间的预测值。我们将它传递给when_ms()成员函数。when_ms()使用“算法部分4.4停止调度”中描述的方法返回适当执行时间为止的时间。我们将得到的值传递给第155行的os::sleep()，让并行标记线程sleep到合适的时间。
@@ -225,4 +226,5 @@ davg（）返回衰减平均值。sigma（）是可靠性。dsd（）返回衰�
 381:   }
 ```
 
-_alloc_rate_ms_seq保存过去的“分配区域数/经过时间”的历史，并从历史信息中获得下一个预测值。
+_alloc_rate_ms_seq保存过去的“分配区域数/经过时间”的历史，并从历史信息中获得下一个预测值。    
+然后，Calculate_young_list_min_length()超过在预测值的513线和时间直到获得（毫秒）的下一站可能的定时，发出下一个将被分配给最多停止可能的定时的附近区域的数量的预测值。在过去的515行，用数的当前新生成区上限添加数字，对于局部新一代GC新一代地区数目上限将决定。
