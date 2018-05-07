@@ -150,3 +150,79 @@ _davg是衰减平均值，_davariance是衰减离差。_alpha的默认值是0.7�
 ```
 
 第956行查找初始标记阶段的停止时间，并将该时间添加到第957行的TruncatedSeq。
+
+## 获取预测值
+下面看看获取预测值的部分的处理。查找初始标记阶段的预测值的成员函数如下所示。
+``` cpp
+//share/vm/gc_implementation/g1/g1CollectorPolicy.hpp
+536：double predict_init_time_ms(){
+537：return get_new_prediction(_concurrent_mark_init_times_ms);
+538：}
+```
+
+537行的get_new_prediction()通过_concurrent_mark_init_times_ms传递成员变量，返回预测值。
+get_new_prediction()的定义如下
+``` cpp
+//share/vm/gc_implementation/g1/g1CollectorPolicy.hpp
+342：double get_new_prediction（TruncatedSeq * seq）{
+343：return MAX 2（seq  -> davg（）+ sigma（）* seq  -> dsd（），
+344：seq  -> davg（）* confidence_factor（seq  -> num（）））;
+345：}
+```
+
+MAX2（）是一个比较参数并返回大数的函数。当历史记录不足时，采用344行的方式进行处理，，因此将省略其解释，并且将仅解释343行处的处理。
+
+davg（）返回衰减平均值。sigma（）是可靠性。dsd（）返回衰减标准差。
+
+## 并行标记的调度
+让我们看看在“算法部分4.4停止调度”中描述的GC调度定时sleep的实现。了解了从历史中获取预测值之后这里就变得非常容易理解。
+
+我们将以最后的并行标记阶段为例。
+``` cpp
+//share/vm/gc_implementation/g1/concurrentMarkThread.cpp
+93: void ConcurrentMarkThread::run() {
+152:double now = os::elapsedTime();
+153:double remark_prediction_ms = g1_policy->predict_remark_time_ms();
+154:jlong sleep_time_ms = mmu_tracker->when_ms(now, remark_prediction_ms);
+155:os::sleep(current_thread, sleep_time_ms, false);
+/*执行最终标记阶段*/ 
+165:CMCheckpointRootsFinalClosure final_cl(_cm);
+166:sprintf(verbose_str, "GC remark");
+167:VM_CGC_Operation op(&final_cl, verbose_str);
+168:VMThread::execute(&op);
+```
+
+第152行的os::elapsedTime()是一个静态成员函数，用于返回自HotspotVM启动以来经过的时间。第153行的predict_remark_time_ms()获取将要发生的最后一个标记阶段的时间的预测值。我们将它传递给when_ms()成员函数。when_ms()使用“算法部分4.4停止调度”中描述的方法返回适当执行时间为止的时间。我们将得到的值传递给第155行的os::sleep()，让并行标记线程sleep到合适的时间。
+
+除了并行标记之外，其他停止处理方式与上面相同。
+
+## 退避调度
+疏散的执行时间由“算法部分5.8 新生代region数量限定”中所述的新生代region的数量决定。由于新生代GC的计算方法相当复杂，因此我们只考虑简单的部分新生代GC的情况。
+
+在部分新生代GC的情况下，必须在可保护GC单位时间的范围内将新生代区域数量上限设置得尽可能小（？？？感觉应该是大吧
+）。使用以下成员函数设置值。
+``` cpp
+//share/vm/gc_implementation/g1/g1CollectorPolicy.cpp
+503: void G1CollectorPolicy::calculate_young_list_min_length() {
+504:   _young_list_min_length = 0;
+505:
+509:   if (_alloc_rate_ms_seq->num() > 3) {
+510:     double now_sec = os::elapsedTime();
+511:     double when_ms = _mmu_tracker->when_max_gc_sec(now_sec) * 1000.0;
+512:     double alloc_rate_ms = predict_alloc_rate_ms();
+513:     size_t min_regions = (size_t) ceil(alloc_rate_ms * when_ms);
+514:     size_t current_region_num = _g1->young_list()->length();
+515:     _young_list_min_length = min_regions + current_region_num;
+516:   }
+517: }
+```
+
+首先，将当前经过的时间传递给线511上的when_max_gc_sec()以查找直到下一个可停止时间。第512行的Predict_alloc_rate_ms（）是预测下一个“分配区域数/经过时间”比率的成员函数。因此alloc_rate_ms * when_ms取整就得到了region的数量。
+``` cpp
+//share/vm/gc_implementation/g1/g1CollectorPolicy.hpp
+379:   double predict_alloc_rate_ms() {
+380:     return get_new_prediction(_alloc_rate_ms_seq);
+381:   }
+```
+
+_alloc_rate_ms_seq保存过去的“分配区域数/经过时间”的历史，并从历史信息中获得下一个预测值。
