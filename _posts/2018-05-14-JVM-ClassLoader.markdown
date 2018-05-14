@@ -38,3 +38,17 @@ public class ClassLoaderEqualsTest {
     }
 }
 ```
+程序运行结果为：
+```
+class jvm.BigClazz
+false
+jvm.ClassLoderEqualsTest$1@1540e19d
+sun.misc.Launcher$AppClassLoader@18b4aac2
+```
+可以看出，两个jvm.BigClazz类并不相等，因为它们的类加载器并不是同一个。
+
+## 双亲委派模型
+从Java虚拟机的角度来说，类加载器分为两类：
+* Bootstrap ClassLoader:由C++实现，属于虚拟机的一部分，用于加载Java基本的类。
+* 其他ClassLoader:由Java实现，独立于虚拟机外部，全都继承于抽象类java.lang.ClassLoader,用于加载其他的Java类。
+
