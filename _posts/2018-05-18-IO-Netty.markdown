@@ -32,3 +32,18 @@ Java NIO框架的核心是Channel，Selector，Buffer。读取数据的常见流
 3. 将准备好的Channel放入ThreadPool中执行
 
 整个流程固定而且繁琐，完全由用户来控制与操作。事实上，用户仅会关心`如何处理接收到的数据`，并不关心`如何接收数据`。Netty框架接管了这部分繁琐的流程，以事件驱动模型进行构建，采用Facade门面模式将NIO的细节封装起来，仅仅暴露一组简单而通用的API给用户使用。
+
+## Netty组件及结构
+Netty整体架构如下图所示
+
+![netty-structure](../resources/img/netty-structure.png)
+
+Netty主要由六种组件组成：与线程密切相关的EventLoopGroup，EventLoop；与io，系统密切相关的Channel；与用户逻辑密切相关的ChannelPipeline与ChannelHandler；数据的承载者ByteBuf以及将所有组件所组合在一起的BootStrap。
+
+* EventLoopGroup：相当于ExecutorService，该类确定了整个Netty的线程/EventLoop的分配方式，每一个EventLoopGroup中包含有一个或多个EventLoop。
+* EventLoop：Netty事件循环的Engine，数据的读写与Event的传播都通过该类进行驱动。同时该类也是Netty线程调度的核心抽象，用于处理连接的生命周期中所发生的事件。EventLoop可以被多个Channel所共享。
+* Channel：Channel就是Netty中连接的抽象。每个Channel都有一个与之对应的ChannelPipeline。
+* ChannelPipeline：用于保存经过编排的ChannelHandler实例链的数据结构。每个ChannelPipeline中含有若干个ChannelHandler，ChannelHandler之间是有序的，ChannelPipeline将保证事件按顺序流经被每一个ChannelHandler实例。
+* ChannelHandler：用户逻辑的核心实现类。ChannelHandler采用ByteBuf作为数据容器。
+* ByteBuf：Netty中的数据容器类，与ByteBuffer类似，但提供了一些新的功能。
+* BootStrap：用于将Netty中的各组件组合起来。
