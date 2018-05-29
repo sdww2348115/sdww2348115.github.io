@@ -47,3 +47,7 @@ Netty主要由六种组件组成：与线程密切相关的EventLoopGroup，Even
 * ChannelHandler：用户逻辑的核心实现类。ChannelHandler采用ByteBuf作为数据容器。
 * ByteBuf：Netty中的数据容器类，与ByteBuffer类似，但提供了一些新的功能。
 * BootStrap：用于将Netty中的各组件组合起来。
+
+## ByteBuf
+Netty基于Java NIO的ByteBuffer设计了一套用于承载数据的结构：ByteBuf
+
