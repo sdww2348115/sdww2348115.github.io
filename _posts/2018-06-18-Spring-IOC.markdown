@@ -39,3 +39,23 @@ IOC设计模式所带来的优点：
  * 由于IOC容器接管了所有对象的创建与管理，因此一些对于对象的批量修改功能有了实现的基础（AOP）
 
 该章节主要是个人理解，这里有一篇Martin大佬关于IOC的文章：[Inversion of Control Containers and the Dependency Injection pattern](https://www.martinfowler.com/articles/injection.html)
+
+## IOC容器
+业务对象通过IOC声明相应的依赖，最终由IOC容器将这些相互依赖的对象绑定到一起。IOC容器的职责主要就是这两方面：业务对象的构建管理与业务对象间的依赖绑定。
+
+ * `业务对象的构建管理`：在IOC场景中，业务对象无需关心所依赖的对象如何构建如何取得，但是这部分工作始终需要有人来做。IOC容器将对象的构建逻辑从逻辑代码中剥离出来，以免这部分逻辑污染业务对象的实现。
+ * `业务对象见的依赖绑定`：对于IOC容器来说，这是其核心职责。IOC容器通过结合之前构建和管理的所有业务对象，以及各个业务对象间可识别的依赖关系，将这些对象所依赖的对象注入绑定，从而保证每个业务对象在使用的时候，可以处于就绪状态。
+
+Spring提供了两种容器类型：`BeanFactory`和`ApplicationContext`。
+
+* BeanFactory：基础类型IOC容器，提供完整的IOC服务支持。如果没有特殊指定，默认采用延迟初始化策略。只有当客户端对象需要访问容器中的某个受管对象时，才会对该受管对象进行初始化以及依赖注入操作。
+* ApplicationContext。ApplicationContext在BeanFactory的基础上进行构建，是相对比较高级的容器实现，除了拥有BeanFactory的所有支持，ApplicationContext还提供了其他比较高级的特性，比如事件发布、国际化信息支持等。ApplicationContext所管理的对象，在该类型容器启动之后，默认全部初始化并绑定完成。
+
+![ApplicationContext](../resources/img/ApplicationContext.png)
+
+上图为ApplicationContext的继承结构，除了BeanFactory外，ApplicationContext还继承了以下接口：
+
+* MessageSource:用于处理参数化或国际化的消息。
+* ResourceLoader：用于定位resource资源地址
+* ApplicationEventPublisher：用于实现Spring内部事件触发机制
+* EnvironmentCapable：ApplicationContext可以根据该接口判断自己的BeanFactory具体使用哪些方法，用于区分各种环境。
