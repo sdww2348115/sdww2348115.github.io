@@ -73,3 +73,8 @@ ListableBeanFactory接口继承自BeanFactory，它在BeanFactory所提供的的
 
 ## HierarchicalBeanFactory
 HierarchicalBeanFactory表明BeanFactory可以含有Parent Factory，在运用时只需要注意其提供了一个判断当前Factory是否含有这个Bean的方法：containsLocalBean。
+
+## BeanDefinitionRegistry
+BeanDefinitionRegistry用于注册和保管BeanDefinitions，通常由BeanFactories实现。在Spring框架中，所有注册与保管BeanDefinition的接口都被封装在BeanDefinitionRegistry中。
+
+通常与BeanDefinitionReader搭配使用。
