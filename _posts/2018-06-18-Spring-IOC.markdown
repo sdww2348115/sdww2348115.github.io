@@ -78,3 +78,10 @@ HierarchicalBeanFactory表明BeanFactory可以含有Parent Factory，在运用�
 BeanDefinitionRegistry用于注册和保管BeanDefinitions，通常由BeanFactories实现。在Spring框架中，所有注册与保管BeanDefinition的接口都被封装在BeanDefinitionRegistry中。
 
 通常与BeanDefinitionReader搭配使用。
+
+## BeanDefinition
+BeanDefinition用于描述一个Bean的信息，它被保存于BeanDefinitionRegistry中，由BeanFactory将其实例化为具体的Bean。
+
+BeanDefinition继承关系如下：
+
+![BeanDefinition](../resources/img/BeanDefinition.png)
