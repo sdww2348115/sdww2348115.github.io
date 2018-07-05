@@ -60,26 +60,37 @@ Spring提供了两种容器类型：`BeanFactory`和`ApplicationContext`。
 * ApplicationEventPublisher：用于实现Spring内部事件触发机制
 * EnvironmentCapable：ApplicationContext可以根据该接口判断自己的BeanFactory具体使用哪些方法，用于区分各种环境。
 
-## BeanFactory
+## Spring中的IOC容器
+
+![SpringIOC](../resources/img/SpringIOC.jpg)
+
+上图为Spring中IOC容器的主要组件，它们配合起来共同完成IOC的功能。
+
+ * BeanDefinitionReader 负责从配置文件、代码等处获取Bean的描述信息，并将这些信息组织为标准的可使用的BeanDefinition
+ * BeanDefinitionRegistry 从BeanDefinitionReader处获取BeanDefinition，并按照规则将它们组织成Bean，放入自身容器中保管起来
+ * BeanFactory 向外部模块提供获取Bean的接口 
+
+### BeanFactory
 BeanFactory是整个SpringIOC技术的基石。
 
 BeanFactory中包含许多Bean的定义，这些Bean以String类型的name作为唯一标识符。与ListableBeanFactory中的接口不同，当BeanFactory的实现属于HierarchicalBeanFactory时，如果当前BeanFactory中找不到目标Bean的定义，该Factory将会查找当前BeanFactory的直接Parent。如果出现Bean同名的情况，当前BeanFactory中的Bean将会覆盖Parent Factory中的Bean。
 
-## ListableBeanFactory
+#### ListableBeanFactory
 ListableBeanFactory接口继承自BeanFactory，它在BeanFactory所提供的的获取Bean接口的基础上，提供了一大批获取BeanDefination的接口，比如根据Type获取Bean的名字；根据注解获取Bean的名字；判断Bean是否属于该BeanFactory等。使用该接口中的方法需要注意两点：
 
 1. 接口中的方法只会返回当前BeanFactory的结果，即使BeanFactory实现了HierarchicalBeanFactory接口，这些方法依然不会返回Parent Factory中的信息。通过`BeanFactoryUtils`可以判断Bean属于哪个Factory。
 2. 这些方法也不会返回那些经过特殊方式交由该Factory管理的Bean。比如通过ConfigurableBeanFactory.registerSingleton方法所注册进该Factory中的Bean。
 
-## HierarchicalBeanFactory
+#### HierarchicalBeanFactory
 HierarchicalBeanFactory表明BeanFactory可以含有Parent Factory，在运用时只需要注意其提供了一个判断当前Factory是否含有这个Bean的方法：containsLocalBean。
 
-## BeanDefinitionRegistry
+### BeanDefinitionRegistry
 BeanDefinitionRegistry用于注册和保管BeanDefinitions，通常由BeanFactories实现。在Spring框架中，所有注册与保管BeanDefinition的接口都被封装在BeanDefinitionRegistry中。
 
-通常与BeanDefinitionReader搭配使用。
+### BeanDefinitionReader
+BeanDefinitionReader负责从外部收集信息，将这些信息处理为Spring标准的描述形式：BeanDefinition。并将这些BeanDefinition提供给BeanDefinitionRegistry。
 
-## BeanDefinition
+### BeanDefinition
 BeanDefinition用于描述一个Bean的信息，它被保存于BeanDefinitionRegistry中，由BeanFactory将其实例化为具体的Bean。
 
 BeanDefinition继承关系如下：
