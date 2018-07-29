@@ -128,7 +128,7 @@ Fork/Join框架通过work-stealing一整套解决方案来解决这个问题。�
 
 ![state2](../resources/img/state2.png)
 
-3.step1阶段的thread2，thread3，thread4执行完成后，任务栈就空了，但是thread1的任务栈中被压入了countFile(subDir1),countFile(subDir2),countFile(subDir3)三个任务。在ForK/Join框架下，此时任务栈为空的线程将尝试从thread1中获取task，并放入到自己的任务栈中当作自己的task并以递归的方式运行。这样的行为感觉像是从其他线程的task栈中偷取了一个任务来运行，所以被称为work-stealing。偷取之后的任务栈如下所示，通过这样的方式就实现了子任务在各线程间的平均分配。
+3.step1阶段的thread2，thread3，thread4执行完成后，任务栈就空了，但是thread1的任务栈中被压入了countFile(subDir0),countFile(subDir1),countFile(subDir2),countFile(subDir3)三个任务。在ForK/Join框架下，此时任务栈为空的线程将尝试从thread1中获取task，并放入到自己的任务栈中当作自己的task并以递归的方式运行。这样的行为感觉像是从其他线程的task栈中偷取了一个任务来运行，所以被称为work-stealing。偷取之后的任务栈如下所示，通过这样的方式就实现了子任务在各线程间的平均分配。
 
 ![state3](../resources/img/state3.png)
 
