@@ -118,47 +118,172 @@ public static Integer countFileByTask(File root) {
 
 仔细分析countFileByTask方法：其核心计算逻辑只有一个return 0以及将各子任务的值进行累加，但是却引入了对每一个子目录/文件创建Thread的过程！创建Thread的开销远远大于简单累加的开销，更不用说当Thread实例数量爆炸之后操作系统调度所带来的开销以及GC的时间开销。
 
-事实上，使用这种方式解决问题的隐含着将task转换为了thread的过程，程序分配的事实上是thread而非task。
+Fork/Join框架通过work-stealing一整套解决方案来解决这个问题。对于上面的目录树，我们分别画出各工作线程的递归堆栈，如下：
 
+1.有4个工作线程，每个线程分别负责root下一个子目录的工作
 
-## Fork/Join框架的实现之道
+![state1](../resources/img/state1.png)
 
-### 功能实现
+2.thread1-3迅速完成了自己的工作，但是thread0仍有许多子任务需要处理
 
-将thread与task分割开来，并将task分配给多个线程运行，这不跟固定大小的线程池用法差不多吗？
+![state2](../resources/img/state2.png)
 
-考虑使用固定大小线程池来实现上面的伪代码，上文中的124都可以实现，唯一的问题在于第3点:如果任务需要被划分为若干个更小的任务，将划分后的任务全部放入任务池，此时线程有两个选择：
+3.step1阶段的thread2，thread3，thread4执行完成后，任务栈就空了，但是thread1的任务栈中被压入了countFile(subDir1),countFile(subDir2),countFile(subDir3)三个任务。在ForK/Join框架下，此时任务栈为空的线程将尝试从thread1中获取task，并放入到自己的任务栈中当作自己的task并以递归的方式运行。这样的行为感觉像是从其他线程的task栈中偷取了一个任务来运行，所以被称为work-stealing。偷取之后的任务栈如下所示，通过这样的方式就实现了子任务在各线程间的平均分配。
 
- 1. 直接返回，这样将无法完成后续聚合所有子任务的步骤
- 2. 线程阻塞等待，由于线程池中的线程数量固定，其中的线程将迅速被耗尽，都处于阻塞状态，造成线程死锁
+![state3](../resources/img/state3.png)
+
+## Fork/Join框架的实现细节
+
+上一节主要讨论了Fork/Join框架的总体思路，这一节将介绍框架实现中的部分关键细节
+
+### 两种Work-Stealing方式
+
+什么样的worker线程需要从其他线程的工作queue中偷取task？答案很简单：当前taskQueue为空的worker。taskQueue为空有两种情况：1.worker的工作队列为空，所有任务执行完成；2.worker所fork的任务被其他worker所偷走了，当前worker处于join等待，但是工作队列却无task可用。
+
+对于第一种情况，由于worker“无事可做”，所以从其他任意worker处偷取一个task放入自己的taskQueue执行即可。
+
+对于第二种情况，如果从其他任意worker偷取task就可能会出现问题。假设情况如下：
+
+ * task1任务被提交至ForkJoinPool中
+ * worker1获取到task1并开始执行
+ * 在worker1执行task1的过程中调用了task3,fork()，worker1将task3放入自己的工作队列，此时worker2将task3偷走并执行
+ * 当worker1执行到task3.join()时，发现自己的taskQueue中无任务可执行了，从其他任意taskQueue中偷取到了刚被提交至pool中的task2
  
-解决上面的任意一个问题都可以达到完善语义的目的，从而构建出一个语义完整的并发递归框架。
+这种情况下，只有当task2被执行完成后才能执行完成task1。等价于在执行task1的过程中调用了task2.join()，或者说task2成为了task1递归中的一部分。但是在代码逻辑中task1与task2是完全独立的两个任务！由于框架的运行导致这两个task之间有了依赖关系。这样的话task1在执行过程中被反复添加多个task的依赖，会导致task1迟迟得不到返回。
 
-方案1.从解决问题1入手，在返回时将后续步骤封装为一个新的task并放入线程池中，这个新的task以伪代码形式表示：
+对于调用task.join()方法而进入"空闲"状态的线程在进行work-stealing时，只有偷取由该task所fork出来的子任务以及子任务的子任务(递归)才是安全的，这样就能保证执行当前task时，不会插入其他的task“污染”当前task 的执行。因此，调用task.join()方法而进入"空闲"状态的worker线程，它会扫描整个pool的所有taskQueue，找到哪些Queue中的任务是从自己当前join的task中所fork出来的，然后偷取这些queue中的task并执行。
+
+### 双端队列
+
+work-stealing最核心的问题是：如何避免冲突？如果steal与当前线程都从栈顶获取任务，可预料的这样会造成大量的资源竞争导致系统整体性能降低。Fork/Join框架采用了一种很巧妙的方式来避免工作线程与偷取线程之间的资源竞争–双端队列。
+
+双端队列是一种既支持先进先出又支持后进先出的队列，工作线程使用后进先出的方式获取task（工作起来就像一个栈），其他偷取线程将使用先进先出的方式获取task。该数据结构巧妙的地方在于三点：1.一定层面上避免了工作线程与偷取线程之间的竞争，只有当双端队列中仅含一个元素时才会存在竞争关系；2.越早进入queue的task对应递归树中的层数越高，其工作量也就可能越大，这样steal线程偷取并运行task的时间足够长，不用频繁调用偷取逻辑导致资源竞争；3.一定程度上保证了工作线程的本地性，使得工作线程访问数据的效率有所提高。
+
+### TaskQueue
+
+如果要将一个task提交至ForkJoinPool中运行，应该如何处理？如果将该task随便放入一个taskQueue中，如果此时该queue所绑定的worker正在处理其他task，会造成与上一节相同的问题：即将这个task随机join到了其他的task之中。安全的做法是将task放入没有运行task的worker所使用的queue中，这样操作所带来的问题在于：如果所有的worker都忙于处理task，那么提交task的方法将会一直阻塞，直到有worker线程空闲才会返回。
+
+更好的设计方案自然是把提交的任务放到一个地方，当worker空闲之后自己来拿就好了。结合work-stealing特性，ForkJoinPool会创建一些特别的queue：它不被任何一个worker线程所持有，并且保存的是非worker线程所提交的task。当worker线程空闲下来后，它们也会从这些queue中偷取任务并执行，这样的queue就被称为SharedQueue，相对的，与worker线程所绑定的queue被称为privateQueue。ForkJoinPool使用数组来保存所有的queue，其中下标&1 = 1的queue均为privateQueue。
+
+### CommonPool
+
+如果我们有n个ForkJoinTask需要执行，是把所有Task丢入一个ForkJoinPool执行好还是为每一个Task单独创建一个ForkJoinPool执行好？答案肯定是将所有的task放入一个大pool中执行更好，原因是创建的ForkJoinPool对象以及Thread对象更少，更加节约系统资源，同时避免了多Thread调度所带来的系统开销，计算这些task使用一个pool比使用多个pool使用的时间会更少。将该情形推广至整个JVM运行过程，也就是说在JVM运行的过程中，仅需要一个ForkJoinPool就够了，而且比创建多个ForkJoinPool效率更高。这就是ForkJoinPool.commonPool的由来，它是一个static类型的ForkJoinPool，共享给整个JVM中所有ForkJoinTask所使用。
+
+## Fork/Join框架的使用方式
+
+Fork/Join框架适用于分治算法和递归算法，从本质上来说，它是一种高效率的并行递归算法框架（分治算法本质也是通过递归进行求解）。它的典型用法如下:
 
 ```java
-public class CombineTask {
-
-    //完成该task所需的子task
-    List<Task> subTasks;
-    
-    public void run() {
-    
-        //如果依赖task没有全部完成时，将该任务重新放回threadPool中
-        for (Task task : subTasks) {
-            if (!task.isDone()) {
-                return task to threadPool;
-            }
-        }
-        
-        //所有依赖task都已完成，执行后续计算步骤
-        doCombine..
+Result solve(Problem problem) {
+    if (problem is small) {
+        directly solve problem
+    } else {
+        split problem into independent parts
+        fork new subtasks to solve each part
+        join all subtasks
+        compose result from subresults
     }
 }
 ```
 
-如上所示，该方案简单易行，但是存在一个问题：当线程拿到依赖任务还未完成的任务时，将执行许多无用操作：判断子任务执行情况，将任务重新返回线程池，以及这些操作所带来的的线程切换开销。
+fork操作将启动一个新的子任务，join操作会一直等待直到所有的子任务都结束。像其他分治算法一样，Fork/Join框架总是会递归的、反复划分子任务，直到这些子任务足够小。这里足够小的标准是指：创建/调度更小任务的成本大于以单线程方式直接执行的成本，也就是说划分子任务并并行执行的时间比单线程执行更慢。请注意，Fork/Join框架中的task仅会阻塞在join处，在其他任何时候都不应该被阻塞。
 
-因此，并发大师Doug Lea并未采用此方案，而是采取的第二种方案。
+这里以计算斐波那契数列第n项值的经典问题为例向大家介绍Fork/Join框架的使用方式。斐波那契数列指的是这样一个数列 1, 1, 2, 3, 5, 8, 13, 21，从第二项开始每一项都是前两项之和，它属于一个典型的递归算法。普通递归方式求解的代码如下：
 
-方案2.以问题2入手，当线程执行到需要等待的情况时，让该线程执行任务池中其他任务而非处于阻塞等待状态。
+```java
+public static Integer fibonacci(Integer n) {
+    if (n < 2) {
+        return 1;
+    } else {
+        return fibonacci(n - 1) + fibonacci(n - 2);
+    }
+}
+```
+
+将其改写为调用Fork/Join框架形式，使其可以行，代码如下：
+
+```java
+public class Fibonacci extends RecursiveTask<Integer>{
+ 
+    private Integer n;
+     
+    public Fibonacci(Integer n) {
+        this.n = n;
+    }
+ 
+    @Override
+    protected Integer compute() {
+        if (n < 2) {
+            return 1;
+        } else {
+            Fibonacci subTask1 = new Fibonacci(n - 1);
+            Fibonacci subTask2 = new Fibonacci(n - 2);
+            subTask1.fork();
+            subTask2.fork();
+            return subTask1.join() + subTask2.join();
+        }
+    }
+}
+```
+
+但是上面代码的执行效率并不够高。考虑执行Fibonacci(2)的情况，此时上述代码会创建两个subTask分别计算Fibonacci(2)和Fibonacci(1)，每一个任务的都涉及到创建任务对象，将任务对象push到taskQueue中，再从taskQueue中将task拿出来再执行....其中可能还会涉及到线程之间的竞争，各种条件的验证等。但是其实际计算只有一个简单的判断与返回，将其并行化所带来的开销远远大于了并行执行计算所节约的时间。在这种情况下，并行反而导致计算的效率更低。所以有必要限制一下subTask的大小，`当拆分并行所带来的收益小于拆分过程所带来的开销时，就直接执行任务，不再拆分并行`。如下：
+
+```java
+public class Fibonacci extends RecursiveTask<Integer>{
+ 
+    /**
+     * 每一种算法的THRESHOLD值都不一样，该值是通过大量测试得到的
+     */
+    private final static Integer THRESHOLD = 13;
+ 
+    private Integer n;
+ 
+    public Fibonacci(Integer n) {
+        this.n = n;
+    }
+ 
+    @Override
+    protected Integer compute() {
+        //子任务足够小时，直接在当前线程内执行计算
+        if (n < THRESHOLD) {
+            return calculate(n);
+        } else {
+            Fibonacci subTask1 = new Fibonacci(n - 1);
+            Fibonacci subTask2 = new Fibonacci(n - 2);
+            //请注意下面几行各subTask方法的调用顺序
+            subTask1.fork();
+            subTask2.fork();
+            //return subTask2.join() + subTask1.join();更好
+            return subTask1.join() + subTask2.join();
+        }
+    }
+ 
+    private Integer calculate(Integer val) {
+        if (val < 2) {
+            return 1;
+        } else {
+            return calculate(val - 1) + calculate(val - 2);
+        }
+    }
+}
+```
+
+上面的代码还有一个小细节需要注意：subTask的fork、join顺序。当前顺序为：subTask1.fork() -> subTask2.fork() -> subTask1.join() -> subTask2.join()，事实上更好的顺序应为：subTask1.fork() -> subTask2.fork() -> subTask2.join() -> subTask1.join()。即join的顺序应与fork顺序相反，以栈的方式对这些task进行调用效率最高。原因如下：
+
+ 1. 便于线程本地化，充分利用缓存。由于刚调用了subTask2.fork()，所以与subTask2相关的数据更有可能仍存在于缓存之中，join时从缓存中拿到计算数据的可能性更大。
+ 2. 便于work-stealing。以第一种顺序执行时，由于join的subTask并不在workQueue的栈顶而是在栈底，因此当前线程也会尝试从栈底获取subTask1，同时，其他worker偷取也是从栈底开始。这样一方面会导致获取任务时线程之间的冲突会增加，另一方面会导致subTask1更有可能被其他线程所偷走并执行，当前worker发现subTask1被偷走了，又会去stealer那里偷取线程执行，会执行许多次不必要的steal操作
+ 3. 不会增加无用操作，如果所执行的subTask既不在taskQueue的头部也不在尾部，join的时候会创建一个空task对其进行替换，再执行
+ 
+## Fork/Join框架使用注意事项
+
+为了方便大家能够正确使用Fork/Join框架，特意整理了以下几点注意事项供大家参考：
+
+ 1. ForkJoinTask必须合乎规范！！！即ForkJoinTask不能有任何外部中断，最好除了join处逻辑上的blocking之外，不要有任何blocking的地方，包括synchronize关键字所导致的blocking！因为ForkJoinTask一般都是提交到ForkJoinPool.commonPool中执行，处于blocking状态中的线程不能像join那样执行其他任务，也就是说该worker线程什么也不能做，只能傻傻等待blocking结束。commonPool中的线程数量一般与当前CPU的核数一致，这样会极大地影响整个JVM的所有ForkJoinTask！
+ 2. 任务拆分的粒度不要太大也不要太小。太大的粒度不便于work-stealing发挥实力，太小的粒度又会导致划分的成本比计算本身更高，具体的粒度大小还是需要用户自己来确定。
+ 3. 请注意subTask的fork，join顺序。
+ 
+## References
+
+ 1. 《Java并发编程的艺术》 方腾飞
+ 2. [聊聊并发（八）——Fork/Join框架介绍](http://ifeve.com/talk-concurrency-forkjoin/)
+ 3. [Java Fork/Join框架](https://github.com/oldratlee/translations/blob/master/a-java-fork-join-framework/README.md)
