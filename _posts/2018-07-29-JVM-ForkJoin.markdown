@@ -78,7 +78,7 @@ public static Integer countFileRoot(File root) {
 
 其中dir2，dir3，dir4均是空目录，所有的计算量仍然集中于运行countFile(dir1)的线程上。其执行效率与单线程递归并无多大提升，由于创建了多个线程，效率甚至还不如单线程递归模式。此方案效率不高的最根本原因是：海量任务集中于某一个线程上，其他工作线程处于闲置状态，结果仍然是无法充分利用CPU资源。
 
-![weiguan](../resources/img/weiguan.png)
+![weiguan](../resources/img/weiguan.jpg)
 
 如果能够将所有的任务`平均`分给许多工作线程， 这样执行起来岂不很棒？以自然语言的方式描述起来如下：假设我们有一个任务池存放着所有的工作任务，每个线程按以下方式进行工作：
 
