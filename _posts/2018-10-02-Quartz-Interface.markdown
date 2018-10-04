@@ -27,3 +27,16 @@ Trigger用于基于一定规则触发独立的Job实例。SimpleTrigger主要用
 * SchedulerListener提供了Scheduler的事件与错误通知接口。
 
 Listeners可以通过ListenerManager接口进行关联和管理。
+
+## Job&JobDetail
+
+JobDetail是Quartz框架所执行的任务实例，其核心方法为execute(JobExecutionContext context);在使用该类时需要注意以下特点:
+
+* Scheduler将会在Trigger触发时根据设置新建Job实例并执行其exectute方法，执行完成后该实例将会被丢弃，被JVM所GC掉。
+
+这样的特征带来两个衍生的限制：
+
+1. 使用默认的JobFactory实现时，Job类必须含有默认的构造函数。
+2. 在同一个job的不同执行时不能通过内置参数的方式进行数据传递。
+
+解决Job执行间数据传递问题必须使用JobDataMap。JobDataMap实现了Map接口，通常可直接当做Map来使用。Job与Trigger都含有自己的JobDataMap。
