@@ -63,3 +63,12 @@ JobDetail是Quartz框架所执行的任务实例，其核心方法为execute(Job
 * Durability：如果一个job被设置为非durable的话，一旦没有任何Trigger关联至Job，该Job将被从Scheduler中自动删除
 * RequestsRecovery ：如果一个任务被设置为RequestsRecovery，在执行的过程中出现可恢复的情况下，程序将尝试恢复上一次执行的状态并继续执行任务。job抛出异常不算可恢复，可恢复包括集群模式下某job抛出异常或者jvm崩溃
 * 另：Job执行过程中的所有异常都应该被catch住，唯一允许被抛出的异常为：JobExecutionException
+
+## Trigger
+
+Trigger中各属性的含义
+
+* JobKey Trigger触发时所执行的job，该Job必须被注册至Scheduler中
+* startTime 表明Trigger开始的时刻。注：如果Trigger为每5分钟执行一次，startTime并不满足条件，Trigger不会立即触发，而是在下一次满足条件时触发
+* endTime 超过该时刻后，Trigger不会再被触发。
+* Priority 如果同一时刻有多个job等待执行，该参数用于表明多个job抢占线程资源时的优先级。
