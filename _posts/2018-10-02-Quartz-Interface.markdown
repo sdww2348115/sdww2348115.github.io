@@ -63,3 +63,27 @@ JobDetail是Quartz框架所执行的任务实例，其核心方法为execute(Job
 * Durability：如果一个job被设置为非durable的话，一旦没有任何Trigger关联至Job，该Job将被从Scheduler中自动删除
 * RequestsRecovery ：如果一个任务被设置为RequestsRecovery，在执行的过程中出现可恢复的情况下，程序将尝试恢复上一次执行的状态并继续执行任务。job抛出异常不算可恢复，可恢复包括集群模式下某job抛出异常或者jvm崩溃
 * 另：Job执行过程中的所有异常都应该被catch住，唯一允许被抛出的异常为：JobExecutionException
+
+## Trigger
+
+Trigger中各属性的含义
+
+* JobKey Trigger触发时所执行的job，该Job必须被注册至Scheduler中
+* startTime 表明Trigger开始的时刻。注：如果Trigger为每5分钟执行一次，startTime并不满足条件，Trigger不会立即触发，而是在下一次满足条件时触发
+* endTime 超过该时刻后，Trigger不会再被触发。
+* Priority 如果同一时刻有多个job等待执行，该参数用于表明多个job抢占线程资源时的优先级。
+
+### MisFire策略
+
+通用策略
+
+* MISFIRE_INSTRUCTION_SMART_POLICY：根据Trigger实现的不同，自动选取合适的误发机制。详细情况请参考Trigger实现类的对应方法
+* MISFIRE_INSTRUCTION_IGNORE_MISFIRE_POLICY：将所有错过的触发?在下一次触发时?一次性全部补偿完毕，并更新Trigger状态：标明所有fire都已触发
+
+SimpleTrigger的Misfire策略选项
+
+* MISFIRE_INSTRUCTION_FIRE_NOW：直接触发，适用于仅触发一次的情况.如果用于剩余次数大于1的情况，等同于MISFIRE_INSTRUCTION_RESCHEDULE_NOW_WITH_REMAINING_REPEAT_COUNT
+* MISFIRE_INSTRUCTION_RESCHEDULE_NOW_WITH_EXISTING_REPEAT_COUNT：scheduler将以当前时间作为start重新执行任务，剩余执行次数与原始startTime信息将丢失。但是`endTime`信息将被保留下来。如果当前时间已经超过endTime，任务将不会再触发。
+* MISFIRE_INSTRUCTION_RESCHEDULE_NOW_WITH_REMAINING_REPEAT_COUNT：scheduler将以当前时间作为startTime，剩余执行次数作为repeatCount重新执行该任务，与上面一样，`endTime`信息被保留，且如果当前时间超过endTime，任务将不会再被触发。如果当前时间错过了剩余所有的触发点，Trigger将被置为COMPLETE状态。
+* MISFIRE_INSTRUCTION_RESCHEDULE_NEXT_WITH_REMAINING_COUNT：类似于MISFIRE_INSTRUCTION_RESCHEDULE_NOW_WITH_REMAINING_REPEAT_COUNT，只不过scheduler的startTime为下一次触发的时间。
+* MISFIRE_INSTRUCTION_RESCHEDULE_NEXT_WITH_EXISTING_COUNT：类似于MISFIRE_INSTRUCTION_RESCHEDULE_NOW_WITH_EXISTING_REPEAT_COUNT，只不过scheduler的startTime为下一次触发时间。
