@@ -94,3 +94,35 @@ SimpleTrigger的Misfire策略选项
 * MISFIRE_INSTRUCTION_RESCHEDULE_NOW_WITH_REMAINING_REPEAT_COUNT：scheduler将以当前时间作为startTime，剩余执行次数作为repeatCount重新执行该任务，与上面一样，`endTime`信息被保留，且如果当前时间超过endTime，任务将不会再被触发。如果当前时间错过了剩余所有的触发点，Trigger将被置为COMPLETE状态。
 * MISFIRE_INSTRUCTION_RESCHEDULE_NEXT_WITH_REMAINING_COUNT：类似于MISFIRE_INSTRUCTION_RESCHEDULE_NOW_WITH_REMAINING_REPEAT_COUNT，只不过scheduler的startTime为下一次触发的时间。
 * MISFIRE_INSTRUCTION_RESCHEDULE_NEXT_WITH_EXISTING_COUNT：类似于MISFIRE_INSTRUCTION_RESCHEDULE_NOW_WITH_EXISTING_REPEAT_COUNT，只不过scheduler的startTime为下一次触发时间。
+
+#### CronTigger的MisFire选项
+
+* MISFIRE_INSTRUCTION_FIRE_ONCE_NOW：立即执行一次Trigger fire
+* MISFIRE_INSTRUCTION_DO_NOTHING：将Trigger的下一次fire时间设置为满足表达式的最近一次时间（错过的fire就让它错过）
+
+### Cron表达式
+
+Cron表达式被证明为一种便于表示任务执行时间的模型。它被广泛地应用于各种定时任务框架中，如crontab、quartz、spring sheduler等。
+
+Cron表达式通常由7个部分组成，它们之间以空格隔开
+
+|名字|取值|允许的特殊字符|
+|:-----:|:---:|:---:|
+|秒| [0 to 59]| ,-*/|
+|分钟| [0 to 59]| ,-*/|
+|小时| [0 to 23]| ,-*/|
+|day of month 每月的多少号| [1 to 31] 且依赖于具体月份| ,-*?/LWC|
+|月份| [0 to 11] or [JAN, FEB, MAR, APR, MAY, JUN, JUL, AUG, SEP, OCT, NOV, DEC]| ,-*/|
+|day of week 星期几| [1 to 7] or [SUN, MON, TUE, WED, THU, FRI, SAT].请注意这里是从1开始，且1表示的是星期天.| ,-*?/LC#|
+|年份(可选)|empty or 1970-2099|,-*/|
+
+#### 特殊字符
+
+* '/'表明一个固定的时间间隔。通常使用方式为"xx1/xx2"，代表从xx1时刻开始，当前项数字能够被xx2整除时，触发fire操作。xx1数字为空时，默认值为0。例如：'/35 * * * * *'代表每分钟的0,35秒时触发该操作。
+* '*'表示任意可以的时刻，满足一切条件
+* '?'仅用于day of month和day of week，表示不指定任何时间，与*类似
+* ','可用于隔开多个值，满足其中任何一个值时都将触发操作
+* '-'用于指明一个范围，范围中的每一个值都满足条件
+* 'L'仅用于day of month以及day of week，表示一个月或一个星期中的最后一天，当该字符与其他特殊字符连用时，表示最后一个满足条件的值，如LW表示一个月中最后一个工作日；L-3表示一个月中的倒数第三天；当放在day of week中时，6L表示一个月中最后一个星期6；
+* 'W'仅用于day of month，用于表明工作日
+* '#'用于表明该月中第n个的意思，比如'6#3'表示一个月中的第三个星期6
