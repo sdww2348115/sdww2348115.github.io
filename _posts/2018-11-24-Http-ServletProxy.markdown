@@ -33,3 +33,30 @@ http请求流在portal层将依次完成以下工作：
 参考Netty的InboundHandler与OutbandHandler，整体结构如下图所示
 ![ServletProxy](../resources/img/servlet-proxy.jpg)
 
+## 详细设计
+
+### 如何在Servlet中实现请求的转发
+我们的portal项目采用的是SpringBoot，Servlet容器选用的是嵌入式tomcat，而且之前并未考虑多servlet项目之间的划分。采用Servlet容器来实现该需求的话会遇到以下问题：
+
+ 1. 多Servlet之间url的划分。由于之前默认只采用一个Servlet，该Servlet的url-pattern为`/*`，在此基础上直接添加Servlet可能会导致目标请求不能按照我们预想的方式进行跳转。
+ 2. SpringBoot的web核心实现仍然为SpringMVC，其双层的applicationContext架构可能会让新的Servlet无法注入预期的bean。
+
+基于以上考虑，该方案将基于Servlet容器中的Filter进行实现。为了方便处理，这里采用javax.servlet.http.HttpFilter作为基类。
+
+### 发送/接收Http请求的框架选择
+目前java使用的httpclient一般为jdk自带的URLconnection/Apache HttpClient/Netty。各个不同实现都有自己的长处与短处：
+
+|实现|优点|缺点|
+| :------:| :------: | :------: |
+|JDK URLConnection|JDK自带，不用额外引入lib|据说有bug,使用起来不太习惯|
+|Apache HttpClient|通用实现方式，使用面广|需要额外引入lib|
+|Netty|NIO实现|使用复杂，操作性较弱|
+
+在无法确定哪条路能够走通或者比较好走的情况下，把这一块抽象出来，使其可以适配各种实现是一种较优的选择。
+
+### 实体类设计
+当我们处理与UI之间交互的时候，我们使用的用于表示HTTP请求的类为`HttpServletRequest`与`HttpServletResponse`，而与后端Core之间交互时，使用的类与传输框架密切相关。因此，在该框架中我们使用两个简化后的类来表示、操作HTTP协议中的Request和Response。
+
+ * Request:类的属性包括:URL、HTTP Method、HTTP Header、Http Body
+ * Response:类的属性包括:StatusCode、HTTP Header、Http Body
+
