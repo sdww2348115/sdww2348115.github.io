@@ -73,4 +73,4 @@ Tomcat由service与connector两部分组成，connector提供数据交互相关�
 
 由于我们的目的是将Http请求直接透传至后方服务，对于请求的任何框架性修改都是不必要的。因此，在设置自定义filter处，添加代码registration.setOrder(Ordered.HIGHEST_PRECEDENCE)将ServletProxyFilter添加在所有Filter的最前方。经过测试，Http请求的InputStream在读取时不会再报stream closed异常。
 
-//TODO:需要检查到底是哪个filter的什么逻辑导致了inputstream无法正常被读取
+//TODO:通过断点跟踪，可以发现，在HiddenHttpMethodFilter中，请求被发现为multipart/form-data格式，因此tomcat对该请求的body做了最基本的解析，包括文件原始名称等，导致inputstream被破坏，无法被正常读取。该流程貌似与form中file只能放在最后也有关系。
