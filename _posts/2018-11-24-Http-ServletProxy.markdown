@@ -60,3 +60,17 @@ http请求流在portal层将依次完成以下工作：
  * Request:类的属性包括:URL、HTTP Method、HTTP Header、Http Body
  * Response:类的属性包括:StatusCode、HTTP Header、Http Body
 
+## stream closed问题
+代码完成编写后，测试时proxy总是报server error。关键错误堆栈如下：
+
+从错误堆栈可以看出，产生问题的原因是stream closed。当前程序运行时，我们有两个InputStream，一个来自UI页面，另一个来自后端server。错误堆栈中的包名：org.apache.catalina可以看出，该问题是出自于UI页面发来的文件上传请求。
+![ServletProxy](../resources/img/exception-stack.PNG)
+
+Tomcat由service与connector两部分组成，connector提供数据交互相关的逻辑，整体并发框架等；所有的逻辑由Service完成，其中主要是由service中的filter完成各项工作(servlet的相关逻辑同样是由filter完成）。当Http请求到达filter的时候，tomcat会对请求做最基本的解析，将其处理为两部分：包含基本信息的Header，以及封装为ServletInputStream类型的Body。该逻辑是我们实现serlvet-proxy的基础。
+
+因此，当我们调用HttpServletRequest.getInputstream.read()方法时，实际上是读取通过socket传来的Http请求中的body部分，正常情况下如果该方法有问题的话，带有body的请求将都不能被正确解析，因此这里的问题一定不是出在Tomcat处。仔细查看错误堆栈，发现来自UI的请求在被我们的filter进行处理之前，已经被spring中的几个filter进行处理了。其中包括：OncePerRequestFilter，CharacterEncodingFilter，HiddenHttpMethodFilter，FormContentFilter，RequestContextFilter。
+初步怀疑是这里Filter的处理导致了InputStream异常的表现。
+
+由于我们的目的是将Http请求直接透传至后方服务，对于请求的任何框架性修改都是不必要的。因此，在设置自定义filter处，添加代码registration.setOrder(Ordered.HIGHEST_PRECEDENCE)将ServletProxyFilter添加在所有Filter的最前方。经过测试，Http请求的InputStream在读取时不会再报stream closed异常。
+
+//TODO:需要检查到底是哪个filter的什么逻辑导致了inputstream无法正常被读取
