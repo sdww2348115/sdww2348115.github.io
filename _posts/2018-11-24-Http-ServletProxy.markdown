@@ -74,3 +74,22 @@ Tomcat由service与connector两部分组成，connector提供数据交互相关�
 由于我们的目的是将Http请求直接透传至后方服务，对于请求的任何框架性修改都是不必要的。因此，在设置自定义filter处，添加代码registration.setOrder(Ordered.HIGHEST_PRECEDENCE)将ServletProxyFilter添加在所有Filter的最前方。经过测试，Http请求的InputStream在读取时不会再报stream closed异常。
 
 //TODO:通过断点跟踪，可以发现，在HiddenHttpMethodFilter中，请求被发现为multipart/form-data格式，因此tomcat对该请求的body做了最基本的解析，包括文件原始名称等，导致inputstream被破坏，无法被正常读取。该流程貌似与form中file只能放在最后也有关系。
+
+当我将上传通道打通之后，又遇到了新的问题：将http的inputstream与servlet的responsestream进行数据copy时，又出现了inputstream closed问题，详细错误堆栈如下：
+
+> java.io.IOException: Attempted read from closed stream.
+	at org.apache.http.impl.io.ContentLengthInputStream.read(ContentLengthInputStream.java:165) ~[httpcore-4.4.10.jar:4.4.10]
+	at org.apache.http.conn.EofSensorInputStream.read(EofSensorInputStream.java:137) ~[httpclient-4.5.2.jar:4.5.2]
+	at org.apache.http.conn.EofSensorInputStream.read(EofSensorInputStream.java:150) ~[httpclient-4.5.2.jar:4.5.2]
+	at org.apache.commons.io.IOUtils.copyLarge(IOUtils.java:1025) ~[commons-io-1.3.2.jar:1.3.2]
+	
+查看对应class源码，异常抛出处非常清晰明白：ContentLengthInputStream在read时会首先check是否关闭，如果stream关闭则会抛出以上错误。check代码， 可以发现在该类中只有一个close方法会将close的值置为true，将这里打上断点进行跟踪，问题终于被找到了：CloseableHttpClient在执行execute方法时，当responseHandler处理完毕请求后，client会将inputstream切断。代码节选自org.apache.http.impl.client.CloseableHttpClient,如下：
+
+```java
+    final T result = responseHandler.handleResponse(response);
+    final HttpEntity entity = response.getEntity();
+    EntityUtils.consume(entity);
+    return result;
+```
+
+因此，当我们的Http请求返回后，此时程序hold住了两个请求：servlet请求与http请求。如果以servlet请求为主，则走默认的ServletFilter逻辑，由Servlet控制请求周期；如果以http请求为主，则走HttpClient逻辑，代码的控制权将交给HttpClient。为了使代码可用，这里采用了callback的形式，将所有后续逻辑以callback的形式放入HttpClient中，由responseHandler负责将两个response连接起来，达到“透传”的目的。
