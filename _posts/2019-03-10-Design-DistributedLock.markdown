@@ -64,13 +64,17 @@ synchronized所实现的锁是一种独占的可重入锁，它还包含了许�
 
 通常来说，非公平锁的效率比公平锁要高。但是将可能导致某些线程（通常是优先级较低的线程）始终无法获取到锁资源，造成线程的"饥饿"状态。具体的取舍由用户自己决定。
 
-### 无中断、可中断与定时锁
-JVM中的Lock接口中有多种获取锁的方法：
+## 锁的实现
+作为一种通用的同步工具，所有锁的核心语义是相通的。JVM中的Lock接口中有多种获取锁的方法：
 
 * lock():无中断、无限等待锁资源
 * lockInterruptibly()：在获取锁等待的过程中可中断，无限等待锁资源
 * tryLock():无阻塞，仅尝试获取锁资源
 * tryLock(long time, TimeUnit unit):最多等待一段时间锁资源，可中断
 
-## 锁的实现
-作为一种通用的同步工具，所有锁的核心语义是相通的。
+这四种不同的调用方式基本可涵盖所有的应用场景，我们将从这4种不同的调用方式中分析JVM中锁的实现原理。
+
+### tryLock
+tryLock在四种调用方式中实现起来最简单，因为它仅涉及到上一章我们所讨论的独占与可重入，没有涉及到锁实现中的难点：`等待队列`，就更谈不上`公平锁`与`非公平锁了`。
+在AbstractQueuedSynchronizer中，Doug Lea大师使用一个int类型变量用于标识当前对象的状态，即上一章我们所讨论的共享的内存空间。该值的声明含有volatile关键字，因此对于所有线程都是可见的；而且对于其的所有赋值操作均以CAS方式实现，保证对其的写操作是原子的。(TIPS：CAS操作存在ABA问题，为何这里没有考虑？如果我们把A当做无锁状态，当任一线程将其置为B状态后，由于Lock机制，仅有持有锁的线程在释放所有锁资源后才能将其置为A状态。)
+同时，在AbstractQueuedSynchronizer的父类AbstractOwnableSynchronizer中，exclusiveOwnerThread属性用于存储持有当前锁资源的线程，这个属性就是我们实现可重入的关键。（TIPS：exclusiveOwnerThread未使用synchronized或volatile关键字修饰，它的可见性`必须`由代码保证。当获取锁资源时，线程必须先修改状态值，再修改exclusiveOwnerThread状态；当释放锁资源时，线程必须先修改exclusiveOwnerThread状态，再修改状态值。由于状态值的volatile属性，内存屏障将保证exclusiveOwnerThread的happens-before，即可见性）
