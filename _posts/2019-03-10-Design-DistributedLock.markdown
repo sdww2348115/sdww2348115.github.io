@@ -90,3 +90,7 @@ if(compareAndSwap(state-free, state-lock)) {
 }
 return false;
 ```
+### tryLockWithTimeOut
+其他的lock调用方式在tryLock的基础上增加了同步等待等功能。
+使用tryLockWithTimeOut时，线程在获取锁资源失败的情况下将阻塞等待一段时间，在此期间可通过Thread.interrupt中断线程的等待行为。如果在设定等待时间内获取到锁资源，方法将立即返回成功，否则将返回失败。
+多个线程同时等待一个锁资源时，为了避免过多的线程切换开销、防止部分线程长时间饥饿，通常会采用队列的方式将等待线程组织起来，按照等待的次序依次获取锁资源。（非公平锁并不保证严格按照等待次序获得锁资源）
