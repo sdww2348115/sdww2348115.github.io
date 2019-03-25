@@ -13,7 +13,7 @@ The subtree of a node is that node, plus the set of all descendants of that node
 Return the node with the largest depth such that it contains all the deepest nodes in its subtree.
 
 题目很拗口，主要的意思是找到一棵二叉树中包含所有最底层节点的最小子树。
-
+![l-865](../resources/img/leetcode/865.png)
 如上图，二叉树高度为4，且深度为4的节点有两个：7,4。包含节点7,4的最小子树就是2,7,4。将其输出即可。
 
 ## 分析
