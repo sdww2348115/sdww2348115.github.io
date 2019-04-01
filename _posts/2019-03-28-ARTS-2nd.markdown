@@ -6,6 +6,12 @@ categories: ARTS GC
 permalink: /arts/2
 ---
 
+## Algorithm
+
+见[文章](../../leetcode/304)
+
+## Review
+
 本周阅读的文章是：[Java's new Z Garbage Collector (ZGC) is very exciting](https://www.opsian.com/blog/javas-new-zgc-is-very-exciting/)
 
 文章主要介绍的是JDK 11新引入的GC算法：ZGC以及其诞生的背景、目的、实现时的关键技术以及目前的现状。
@@ -20,3 +26,12 @@ JVM中的GC算法自06年的G1后就多年没有再增加新的成员了，原�
 毫无疑问，颜色指针可以使得GC线程的并发更加容易，不必再花许多精力用于处理并发问题。LoadBarrier的想象空间就更大了，例如可以将使用不那么频繁的对象进行压缩存储，使用时再通过LoadBarrier进行解压；或者将使用不频繁的对象放在较慢的内存中（比如闪存），使用时再载入到内存中。个人认为，以LoadBarrier使用的频率，如果在其中加入太多逻辑的话可能会得不偿失。而且，当前算法的主流仍是以空间换时间为主，以时间换空间的情况相对较少。
 
 ZGC诞生的时间还不长，当前仍处于实验阶段，官方不建议大家在商业化的xiang，想尝鲜的同学可以在自己的个人项目中试试。
+
+## Tip
+
+## 通过windows自带的netsh命令进行端口数据转发
+windows的netsh命令可直接指定端口转发，监听本机某一个端口的数据，将该端口所接收的数据透传至目标机器与目标端口。
+
+## Share
+
+[PausePredictionModel](../../jvm/g1/PausePredictionModel)
