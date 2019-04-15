@@ -1,0 +1,47 @@
+---
+layout: post
+title:  "ARTS-3rd"
+date:   2019-04-15 21:53:00 +0800
+categories: ARTS
+permalink: /arts/3
+---
+
+## Algorithm
+
+见[文章](../../leetcode/43)
+
+## Review
+
+本周阅读的文章是：AKKO框架的介绍文章：[The challenge of encapsulation](https://doc.akka.io/docs/akka/current/guide/actors-motivation.html#the-challenge-of-encapsulation)
+
+文章主要介绍Akka框架的诞生以及目的。
+
+Akka框架的核心在于Actor模型，早在很久之前Carl Hewitt就提出了Actor编程模型，但是受制于计算机基础硬件的限制，最近这些年才能够达到Actor编程模型的要求。Actor编程模型比起传统的模型更加适合于现代计算机硬件系统，特别是现代的多核CPU系统。
+
+传统的多线程并发控制通常是通过锁来协调。但是锁有以下几个缺点：
+
+1. 在现代操作系统中线程阻塞/唤醒的开销往往较大。（涉及到缓存行失效等）
+2. 当caller线程进入阻塞时，caller线程将浪费大量时间在等待这一过程上，无法做其他事（例如相应用户请求），这会造成糟糕的用户体验
+3. 使用锁的世纪难题：如何避免死锁
+
+而且，锁通常只有在单机的情况下才能工作得良好，涉及到多个实例之间的分布式锁开销将会更大，而且所有的分布式锁都会在使用时加上许多限制条件，导致系统的可扩展性变差。
+
+总的说来，传统的OOP非常适合于单线程执行，通过加锁的方式被多个线程执行时，存在着封装被破坏、容易造成死锁等多种问题。 
+## Tip
+
+### 即使是get操作，也可能对数据造成影响！
+工作中遇到一个奇怪的问题：当FileSystemResource被Jackson序列化后（日志记录），里面的文件内容被清空了。经过定位和查找，原因是FileSystemResource中的getOutputStream方法实现采用的是Files.newOutputStream()，这个方法遇到非空的文件时将会把文件内容清空...私以为get方法中实现却是一个可能对源文件造成影响的方法有待商榷，这里贴一下Files.newOutputStream()方法的注释。
+> This method opens or creates a file in exactly the manner specified
+by the {@link #newByteChannel(Path,Set,FileAttribute[]) newByteChannel}
+method with the exception that the {@link StandardOpenOption#READ READ}
+option may not be present in the array of options. If no options are
+present then this method works as if the {@link StandardOpenOption#CREATE
+CREATE}, {@link StandardOpenOption#TRUNCATE_EXISTING TRUNCATE_EXISTING},
+and {@link StandardOpenOption#WRITE WRITE} options are present. In other
+words, it opens the file for writing, creating the file if it doesn't
+exist, or initially truncating an existing {@link #isRegularFile
+regular-file} to a size of {@code 0} if it exists.
+
+## Share
+
+[JVM G1](../../jvm/g1)
