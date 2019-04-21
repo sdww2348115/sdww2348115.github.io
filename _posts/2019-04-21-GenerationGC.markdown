@@ -13,7 +13,7 @@ permalink: /jvm/gc/generationGc
  2. 一次GC中通常有超过90%的对象都是上次GC后所创建的
  3. 假如一个对象存活了多个垃圾回收周期，GC将会一次又一次对这个对象进行标记
 
-[Bytes allocated]
+[Bytes allocated](../../resources/img/generation-gc-base.png)
 
 ## 分代垃圾回收算法实现
 程序运行时产生的对象可通过多种方式被分为不同的代，通常是根据对象存活的时间来确定。
