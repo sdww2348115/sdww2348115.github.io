@@ -22,23 +22,23 @@ permalink: /jvm/gc/generationGc
 
 假设我们程序的内存被分为两块：低代的Gen0与高代的Gen1。新分配的对象使用Gen0中的空间。
 
-![gen-1](../resources/img/gen-1.png)
+![gen-1](../../resources/img/gen-1.png)
 
 内存中一共有4个对象，此时我们将内存中的一个引用释放掉
 
-![gen-2](../resources/img/gen-2.png)
+![gen-2](../../resources/img/gen-2.png)
 
 假如此时触发了GC，程序会发现Gen0中有两个对象已经不可达了，于是将它们清理掉。
 
-![gen-3](../resources/img/gen-3.png)
+![gen-3](../../resources/img/gen-3.png)
 
 经过多轮GC后，这两个对象仍然处于存活状态，程序会将其晋升至Gen1中，即老年代中
 
-![gen-4](../resources/img/gen-4.png)
+![gen-4](../../resources/img/gen-4.png)
 
 现在，假设在程序运行过程中分配了许多个对象出来，在下一次GC开始时内存里的对象保存情况如下：
 
-![gen-5](../resources/img/gen-5.png)
+![gen-5](../../resources/img/gen-5.png)
 
 当我们只进行Gen0（新生代）的GC时，从Root开始寻找可达的对象，在不扫描Gen1的情况下，只能找到标记有✓的这几个。因为它们是root直接可达的，红色箭头所指向的对象由于是间接可达将无法被扫描到。
 
@@ -46,7 +46,7 @@ permalink: /jvm/gc/generationGc
 
 因此，所有的分代收集算法都会采用一定方式将含有Gen0对象引用的Gen1对象记录下来，当执行Gen0内存区域的垃圾回收时，将这些对象也作为root对待，就避免了对Gen1区域的整体扫描。是一种典型的以空间换时间的算法。具体实现如下图所示：
 
-![gen-6](../resources/img/gen-6.png)
+![gen-6](../../resources/img/gen-6.png)
 
 ## Card Table
 通常来说，老年代的空间大小往往比新生代要大得多，里面对象的数量也非常多。如果我们以引用的方式来保存对象，这个数据结构所占用的空间可能非常大。为了加快一点GC的速度，使得程序整体内存占用上升了30%-40%，这样的开销是否值就有待商榷了。因此，记录老年代空间大小的数据结构有以下两个特点：
@@ -58,7 +58,7 @@ permalink: /jvm/gc/generationGc
 
 保存对象二元状态且最省空间的数据结构必然是bitmap，Card Table也是bitmap的一个变种。它采用一个bit位代表老年代内存中的一片空间，如果这片空间中包含持有新生代引用的对象，就将这片空间至1（标记为dirty）。这样，我们就得到了一个不那么精确的结果：我们知道了哪些空间中包含了持有新生代对象引用的老年代对象。在进行垃圾回收时，只需要将这些对象遍历一次，就能够精确的知道哪些对象是我们所需的。
 
-![cardtable](../resources/img/cardtable.png)
+![cardtable](../../resources/img/cardtable.png)
 
 如上图所示，Card Table中一个bit代表实际内存中4KB的空间。从原理可知：CardTable中bit所映射的空间越小，所包含的信息也就越模糊；映射的空间越大，所占用的内存空间也就越多。JVM中Card Table一个bit对应的内存空间为512byte。
 
