@@ -83,7 +83,7 @@ G1中的YoungGC整个过程都是Stop The World的，使用标准的可达性算
 
 如上图所示，G1 的Eden Region与Old Region都会配备一块额外的空间Remember Set，用于保存其他Old Region中的对象引用当前Region中对象的信息。这样，只需要将Region的Remember Set中所指向的对象也当做Root根节点处理，即可避免扫描老年代空间，节省大量的时间开销。
 
-Tips: 分代垃圾回收与CardTable实现请参考[分代垃圾回收与CardTable]
+Tips: 分代垃圾回收与CardTable实现请参考[分代垃圾回收与CardTable](./gc/generationGc)
 
 ### 全局并发标记
 当YoungGC完成时发现老年代中的使用空间比例大于-XX:InitiatingHeapOccupancyPercent所设置的阈值（默认45%）时，G1就会启动全局并发标记过程，并根据实际情况准备进行MixGC。
