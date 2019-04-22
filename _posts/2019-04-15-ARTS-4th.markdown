@@ -1,0 +1,31 @@
+---
+layout: post
+title:  "ARTS-4th"
+date:   2019-04-22 22:13:00 +0800
+categories: ARTS
+permalink: /arts/4
+---
+
+## Algorithm
+
+见[文章](../../leetcode/973)
+
+## Review
+
+本周阅读：[Why modern systems need a new programming model](https://doc.akka.io/docs/akka/current/guide/actors-motivation.html#the-challenge-of-encapsulation)
+
+本文主要描述了传统编程模型的缺点。
+
+传统编程模型中的write通常是CPU直接修改内存中某一块区域中的值，随着计算机系统的发展，write操作变成了修改CPU内部的cache line。不幸的是CPU多个核之间的cache line通常并不能互相可见，要使对cache line的修改变为对所有CPU可见必须采用volatile关键字或者Atomic相关接口，这往往会造成一定的性能损失，因此目前大家都在想办法如何让程序尽量独立的运行于各个核中，避免锁与可见性这些并发问题所带来的性能损失。
+
+在一般的异步编程情况下，caller线程将task提交给某个中间组件后就去做其他的事了，不会阻塞等待异步线程的完成。此时如果异步线程在执行的过程中出现异常，通常的异常堆栈信息系统工作起来就不是那么好了。从异常的角度来看，堆栈信息往往只能从工作线程获取到该任务的地方开始记录，caller的信息将完全丢失；从caller的角度来讲，当任务被提交至中间件后，任务是否执行，执行的结果怎么样将完全不受自己控制。
+
+总的说来，传统并发编程模型貌似遇到了许多不曾想到的问题，许多编程框架都试图从编程模型的角度来解决这个问题。
+
+## Tip
+
+最近工作时遇到一个奇怪的问题：无论是Apache HttpClient还是Spring 的Resttemplate，都无法获取到302请求。经过查找资料才发现目前大多数Http框架在Get请求遇到302时都会自动redirect（坑爹）。
+
+## Share
+
+全新重构后的[JVM G1](../../jvm/g1)
