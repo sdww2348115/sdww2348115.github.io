@@ -1,0 +1,27 @@
+---
+layout: post
+title:  "ARTS-5th"
+date:   2019-04-28 22:41:00 +0800
+categories: ARTS
+permalink: /arts/5
+---
+
+## Algorithm
+
+[Distinct-Subsequences](../../leetcode/115)
+
+## Review
+
+本周阅读：[How the Actor Model Meets the Needs of Modern, Distributed Systems](https://doc.akka.io/docs/akka/current/guide/actors-intro.html)
+
+本文主要描述Actor模式的模型、核心思想以及实现方式。
+
+模型：Actor模型构建的程序由多个Actor组成，所有的Actor将组成一个有向无环图，程序的推进不再由栈控制，而是由状态、消息、信号等方式向前推进。每个Actor在接受到message后被触发，触发后的Actor可能执行以下
+
+## Tip
+
+
+
+## Share
+
+[协程随想](../../concurrent/coroutine)
