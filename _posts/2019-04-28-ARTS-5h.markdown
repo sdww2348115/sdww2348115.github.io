@@ -4,6 +4,7 @@ title:  "ARTS-5th"
 date:   2019-04-28 22:41:00 +0800
 categories: ARTS
 permalink: /arts/5
+description: 左耳听风ARTS第5周：思考了一下Actor模型的优劣，OOM问题排查时的一些心得
 ---
 
 ## Algorithm
