@@ -4,6 +4,7 @@ title:  "ARTS-4th"
 date:   2019-04-22 22:13:00 +0800
 categories: ARTS
 permalink: /arts/4
+description: 左耳听风ARTS第4周：传统编程模型在当前CPU架构下运行的困境；HTTP框架自动跳转功能
 ---
 
 ## Algorithm

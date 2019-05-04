@@ -4,6 +4,7 @@ title:  "Distinct Subsequences"
 date:   2019-04-23 22:14:00 +0800
 categories: leetcode ARTS algorithm
 permalink: /leetcode/115
+description: 通用的动态规划场景
 ---
 
 ## 题目

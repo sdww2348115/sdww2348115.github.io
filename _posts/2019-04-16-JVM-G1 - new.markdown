@@ -4,6 +4,7 @@ title:  "JVM G1垃圾回收器"
 date:   2019-04-16 21:54:01 +0800
 categories: jvm
 permalink: /jvm/g1-new
+description: 系统系描述了JVM中垃圾回收的关键数据以及G1算法的原理
 ---
 
 ## 垃圾回收器的两个指标

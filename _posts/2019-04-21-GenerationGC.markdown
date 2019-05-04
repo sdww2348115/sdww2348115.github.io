@@ -4,6 +4,7 @@ title:  "Generation GC and CardTable"
 date:   2019-04-21 22:55:00 +0800
 categories: gc jvm
 permalink: /jvm/gc/generationGc
+description: 分代垃圾回收诞生的原因，以及其中重要的数据结构：cardtable
 ---
 
 ## 分代垃圾回收

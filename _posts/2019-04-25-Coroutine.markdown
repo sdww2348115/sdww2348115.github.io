@@ -4,6 +4,7 @@ title:  "协程(coroutine)"
 date:   2019-04-25 23:31:00 +0800
 categories: concurrent thread task
 permalink: /concurrent/coroutine
+description: 从线程的角度描述了协程的概念;分析了协程的优点、缺点；以及协程的适用场景
 ---
 
 ## 协程是什么

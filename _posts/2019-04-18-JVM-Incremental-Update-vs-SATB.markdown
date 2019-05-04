@@ -4,6 +4,7 @@ title:  "Incremental update vs. SATB"
 date:   2019-04-18 23:39:01 +0800
 categories: jvm
 permalink: /jvm/IncrementalUpdateVsSATB
+description: G1算法的SATB与CMS中的IncrementalUpdate之间的区别
 ---
 
 ## 引言
