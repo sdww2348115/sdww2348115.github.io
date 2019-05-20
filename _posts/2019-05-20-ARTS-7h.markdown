@@ -1,0 +1,33 @@
+---
+layout: post
+title:  "ARTS-7th"
+date:   2019-05-20 22:13:00 +0800
+categories: ARTS
+permalink: /arts/7
+description: 左耳听风ARTS第7周
+---
+
+## Algorithm
+
+[Word-Subsets](../../leetcode/958)
+
+## Review
+
+本周阅读：[Can instanceof make Unmodifiable Collections faster?]
+
+作者从一个Hibernate的BUG出发，提出了自己对于JDK中Unmodifiable Colletions的一些看法，并通过设计严谨的实验验证了自己看法的正确性
+
+Hibernate中BUG的原因很简单：Hibernate在某个方法中会反复使用Collections::unmodifiableSet对目标Set进行封装，最后导致方法调用时出现StackOverflowException异常。
+
+作者所设计的方案也很简单，即每次调用Collections::unmodifiableSet这类方法时，首先通过instanceof判断一下，如果满足条件就直接返回，不需要再创建一个包装对象并返回。
+
+个人选择这一篇文章作为本期Review的原因是：这是一个小而完整的例子，关于如何去思考问题，解决问题，设计实验方案并验证可行性。国内的文章大多着墨于理论的推演与技术的说明，缺少了一点实在的探索和实验过程，毕竟，这些验证的东西都是"没有技术含量"的，看完之后常常惊叹于作者的思路与思维，但总觉得还是缺了一点味道。
+
+## Tip
+
+最近在工作中遇到一个问题：使用qemu基于base创建高级镜像时，高级镜像文件中保存有低级镜像文件的路径信息。在做镜像迁移和名字更改时应特别小心这一点。
+
+
+## Share
+
+[分代式GC算法与CardTable](../../jvm/gc/generationGc)
