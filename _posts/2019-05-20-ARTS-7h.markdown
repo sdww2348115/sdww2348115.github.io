@@ -30,4 +30,4 @@ Hibernate中BUG的原因很简单：Hibernate在某个方法中会反复使用Co
 
 ## Share
 
-[分代式GC算法与CardTable](../../jvm/gc/generationGc)
+[三色标记法](../../jvm/gc/threeColor)
