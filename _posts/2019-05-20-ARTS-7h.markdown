@@ -13,7 +13,7 @@ description: 左耳听风ARTS第7周
 
 ## Review
 
-本周阅读：[Can instanceof make Unmodifiable Collections faster?]
+本周阅读：[Can instanceof make Unmodifiable Collections faster?](https://www.opsian.com/blog/can-instanceof-make-unmodifiable-collections-faster/)
 
 作者从一个Hibernate的BUG出发，提出了自己对于JDK中Unmodifiable Colletions的一些看法，并通过设计严谨的实验验证了自己看法的正确性
 
