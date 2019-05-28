@@ -1,13 +1,33 @@
 ---
 layout: post
-title:  "String"
-date:   2019-05-28 23:00:00 +0800
-categories: JDK String format 杂谈
-permalink: /JDK/StringFormat
-description: String.format()方法浅谈
+title:  "ARTS-8th"
+date:   2019-05-28 23:04:00 +0800
+categories: ARTS
+permalink: /arts/8
+description: 左耳听风ARTS第8周
 ---
 
-## 问题
+## Algorithm
+
+[Convert Sorted List to Binary Search Tree](../../leetcode/109)
+
+采用递归的方式将有序链表转化为二叉树
+
+## Review
+
+本周阅读：[Java tip: When to use composition vs inheritance](https://www.javaworld.com/article/2990828/java-101-primer-composition-and-inheritance.html)
+
+文章的内容是一个老生常谈的话题：JAVA什么时候使用封装，什么时候使用继承。
+
+作者通过一个简单的例子说明了继承的风险性：JAVA语言的动态绑定可能会导致父类的方法错误地调用子类方法，破坏了父类的封装，导致代码未按照预期的方式执行。
+
+在实际的使用过程中，个人认为继承还有另一个方面的风险：即对于通用方法的不确定性，例如父类覆盖了默认的equals()方法，继承的子类如果不重写该方法的话可能会导致严重的后果。
+
+继承相比封装最大的好处在于子类可以完美地替代父类，继承所得的子类可以放在任何需要父类实例运行的地方，不需要额外添加包装类的逻辑。因此，继承更适用于对于原有逻辑的加强。
+
+关于继承与封装各自的优缺点与适用环境，大家可以多多思考一下AOP的两种实现方式：Proxy属于封装，而CGLib属于继承。
+
+## Tip
 
 今天在开发的过程中遇到一个很2的问题：使用String.format()对一个字符串进行处理时，程序报错如下：
 ``` 
@@ -68,28 +88,7 @@ private static void checkText(String s, int start, int end) {
 
 通过阅读源码，可以发现当需要format的字符串中含有%字符时，可通过字符%%代替
 
-## String.format方法浅析
-既然走到这里了，不妨看看String.format()方法的具体实现。从核心上来说，String.format()方法主要分为两个步骤：
 
-1. parse步骤：将需要格式化的字符串进行解析，生成待Format的字符数组。
-2. print步骤：将第一步生成的字符数组与参数列表组合起来，生成准确结果。
+## Share
 
-### Parse
-核心代码位于Formatter.parse()中，JDK核心代码采用了正则表达式的方式，将所有支持的格式化表达式写入到Pattern中，使用该Pattern对字符串进行处理，将字符串m模板切分为数段。例如：
-
-|-------------------------||--------------||--|
-SET PASSWORD FOR 'admin'@'%%' = PASSWORD('%s');
-
-上面的字符串将被切分为5段：
-SET PASSWORD FOR 'admin'@'
-%%
-' = PASSWORD('
-%s
-');
-
-从中我们可以看出，每个字符串段可分为两种类型：准确字符串与待格式化字符串,代码中对应的类型为FixedString与FormatSpecifier。
-
-### Print
-核心代码位于Formatter.format()中。每个Formatter实例都含有一个StringBuilder用于拼接字符串，输出结果。在该方法中，代码逻辑将把上面生成的字符串段数组与参数数组组合起来，使用字符串替换的方式将最终结果一点一点组装起来。
-
-具体的代码这里就不细讲了，大家可以去Formatter.format()方法中自行查看
+[Quartz介绍](../../quartz/schduler)
