@@ -91,5 +91,3 @@ SET PASSWORD FOR 'admin'@'
 
 ### Print
 核心代码位于Formatter.format()中。每个Formatter实例都含有一个StringBuilder用于拼接字符串，输出结果。在该方法中，代码逻辑将把上面生成的字符串段数组与参数数组组合起来，使用字符串替换的方式将最终结果一点一点组装起来。
-
-具体的代码这里就不细讲了，大家可以去Formatter.format()方法中自行查看
