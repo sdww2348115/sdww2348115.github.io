@@ -89,5 +89,5 @@ SET PASSWORD FOR 'admin'@'
 
 从中我们可以看出，每个字符串段可分为两种类型：准确字符串与待格式化字符串,代码中对应的类型为FixedString与FormatSpecifier。
 
-### Print
-核心代码位于Formatter.format()中。每个Formatter实例都含有一个StringBuilder用于拼接字符串，输出结果。在该方法中，代码逻辑将把上面生成的字符串段数组与参数数组组合起来，使用字符串替换的方式将最终结果一点一点组装起来。
+FixString非常简单，我们只需要将这个字符串包装一下保存起来即可。对于FormatSpecifier的处理非常巧妙，该类型的构造参数为一个Matcher，其原理是将所有格式化字符串字符再分为不同的类型，通过正则表达式对这些字符再分别进行处理，最终得到解析结果。
+在print的时候，根据FormatSpecifier解析的结果与参数结合，最终一点一点将整个结果拼接起来。
