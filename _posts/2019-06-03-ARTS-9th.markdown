@@ -1,0 +1,31 @@
+---
+layout: post
+title:  "ARTS-9th"
+date:   2019-06-03 23:33:00 +0800
+categories: ARTS
+permalink: /arts/9
+description: 左耳听风ARTS第9周
+---
+
+## Algorithm
+
+[Flatten Nested List Iterator](../../leetcode/341)
+
+使用栈模拟虚拟cursor的方式实现迭代器
+
+## Review
+
+本周阅读：[Message Passing, Remote Procedure Calls and
+Distributed Shared Memory as Communication
+Paradigms for Distributed Systems](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.95.2490&rep=rep1&type=pdf)
+
+文章是一篇论文：通过句法(Syntax),语义(Semantics),实现,模型等多个维度介绍了分布式系统中消息传递、远程过程调用(RPC)以及共享内存(DSM)之间的不同和优劣之处。
+
+本文成文时间很早，各种技术手段的实现方式偏底层，文章中的许多问题在今天看来也都不再是问题。在实际工作的过程中，对于同一个问题，我们所面临的困难通常是解决方案太多而不是太少，如何结合业务场景去分析比较和选择技术方案的难度通常比大家想象的要难得多。我们可以从文章中学习如何去思考、分析、比较不同技术方案优劣的方法，为技术方案的选择提供必要的知识与信息。
+
+## Tip
+使用tgtdam挂载qcow2类型文件时，文件的cluster数不能超过65536，否则将挂载失败。
+
+## Share
+
+[JVM中不同的锁类型](../../jvm/lock)
