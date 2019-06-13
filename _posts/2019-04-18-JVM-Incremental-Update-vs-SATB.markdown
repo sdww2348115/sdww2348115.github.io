@@ -60,3 +60,7 @@ bottom    prevTAMS    nextTAMS     top         end
 (3): [nextTAMS, top): 这部分对象即此轮concurrent marking时所新建的，隐式存活
 
 因此，最终标记阶段Jvm只需要对nextTAMS与top之间的对象进行继续标记即可。
+
+## Grey mutator techniques
+灰指针算法主要关注的是将白色对象的引用放入黑对象字段的这一过程。引入了write barrier，当进行强引用的赋值操作时，管理器将检查赋值对象与被赋值对象的标记状态，如果满足上述危险情况，则将原来的黑对象重新标记为灰色，白色对象的可达状态将推迟至重新扫描阶段决定。
+后来（Boehm）通过记录VM中的page的变化替代程序中对于对象的记录进行了优化，在节约大量用于记录的空间的时候，这样的方式所标记的对象是不准确的，即使是确认标记为黑色的对象，只要位于dirty page中也会被重新扫描一次。整个重新扫描阶段同样是Stop The World的。
