@@ -17,24 +17,13 @@ description: java诊断工具Arthas介绍
 
 ## Arthas的安装与使用
 可参考Arthas官方使用文档：[Arthas中文文档](https://alibaba.github.io/arthas/)
+
 解压后直接执行java -jar arthas-boot.jar即可。进入arthas的命令行交互界面后，Arthas将展示目前机器上所运行的jvm程序，通过1234进行选择，Arthas将attach到目标进程上。此后才能执行Arthas后续的各项指令。
 
 ![arthasTest](../resources/img/arthas-attach.png)
 
 ## 在运行的jvm程序中动态添加日志打印信息
-此功能实现的原理是Arthas可通过JDK中的Instrumentation#redefineClasses方法直接替换JVM中的某个类，实现动态修改JVM中类的功能。
-因此，此功能不仅可以添加日志打印信息，还可以改变类中的运行逻辑！这里仅展示修改打印日志信息的相关方法。
-整个过程主要分为以下几步：
-
-1. 找到目标类的Classloader
-2. 修改目标类的java文件
-3. 编译目标类
-4. redine目标类，替换jvm中的原有类
-
-## 在运行的jvm程序中动态添加日志打印信息
-此功能实现的原理是Arthas可通过JDK中的Instrumentation#redefineClasses方法直接替换JVM中的某个类，实现动态修改JVM中类的功能。
-因此，此功能不仅可以添加日志打印信息，还可以改变类中的运行逻辑！这里仅展示修改打印日志信息的相关方法。
-整个过程主要分为以下几步：
+此功能实现的原理是Arthas可通过JDK中的Instrumentation#redefineClasses方法直接替换JVM中的某个类，实现动态修改JVM中类的功能。此功能不仅可以添加日志打印信息，还可以改变类中的运行逻辑！这里仅展示修改打印日志信息的相关方法。整个过程主要分为以下几步：
 
 1. 找到目标类的Classloader
 2. 修改目标类的java文件
@@ -42,7 +31,7 @@ description: java诊断工具Arthas介绍
 4. redine目标类，替换jvm中的原有类
 
 ### 找到目标类的Classloader
-Java程序在运行的过程中通常会有多个Classloader,程序中的类将被分散加入到各个Classloader中，因此在redefine时必须要指明覆盖哪一个Classloader中的Class.
+Java程序在运行的过程中通常会有多个Classloader,程序中的类将被分散加入到各个Classloader中，在redefine时必须要指明覆盖哪一个Classloader中的Class.
 因此，我们第一步需要找到目标类是由哪个Classloader所加载。这里以`ArthasTest`类为例，所属包名为：`com.sdww.downloaddemo.controller`。在Arthas中执行sc命令：
 ```
 sc -d com.sdww.downloaddemo.controller.ArthasTest
