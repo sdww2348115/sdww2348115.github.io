@@ -30,3 +30,66 @@ Arthas全量包下载：
 2. 修改目标类的java文件
 3. 编译目标类
 4. redine目标类，替换jvm中的原有类
+
+## 在运行的jvm程序中动态添加日志打印信息
+此功能实现的原理是Arthas可通过JDK中的Instrumentation#redefineClasses方法直接替换JVM中的某个类，实现动态修改JVM中类的功能。
+因此，此功能不仅可以添加日志打印信息，还可以改变类中的运行逻辑！这里仅展示修改打印日志信息的相关方法。
+整个过程主要分为以下几步：
+
+1. 找到目标类的Classloader
+2. 修改目标类的java文件
+3. 编译目标类
+4. redine目标类，替换jvm中的原有类
+
+### 找到目标类的Classloader
+Java程序在运行的过程中通常会有多个Classloader,程序中的类将被分散加入到各个Classloader中，因此在redefine时必须要指明覆盖哪一个Classloader中的Class.
+因此，我们第一步需要找到目标类是由哪个Classloader所加载。这里以`ArthasTest`类为例，所属包名为：`com.sdww.downloaddemo.controller`。在Arthas中执行sc命令：
+```
+sc -d com.sdww.downloaddemo.controller.ArthasTest
+```
+Arthas会返回该类的所有信息，如下图所示。请将最后一行所显示的`classLoaderHash`值记录下来，它标志着ArthasTest类由哪个Classloader所加载，在redefine时需要指定该参数。
+[arthasTest](../resources/img/arthas-attach.png)
+
+### 修改目标类的java源文件
+修改java源文件通常有两种方式：
+
+1. 从正在运行的java程序中dump下来目标类的java源代码进行修改。推荐采用这种方式，因为各个局点所使用的版本比较难追溯，难以定位其对应的java文件。
+2. 从版本库中找到对应版本的java源文件进行修改。
+
+以`com.sdww.downloaddemo.controller.ArthasTest`为例，使用jad dump其java文件的命令如下：
+``` bash
+jad --source-only com.sdww.downloaddemo.controller.ArthasTest > /home/sdww/test/ArthasTest.java
+```
+使用方式与bash命令差距不大，重定向符号后面的地址需根据实际情况进行修改。
+
+这里在其两个方法中都添加一个log，用于增加日志打印信息，如下所示：
+```java
+    @GetMapping(value={"/greeting"})
+    public String demo() {
+        log.info("add log to method demo"); //后续添加
+        return "hello world";
+    }
+```
+
+### 编译目标类java源文件
+与修改类似，编译也有两种选择：本地编译或在服务器上编译。本地使用maven/ide/java命令编译与构建工程差距不大，这里就不介绍了，主要讲一下在服务器上在线编译。
+对于服务器上的java文件，如果采用java命令编译通常会出错：编译器将找不到java文件所import的包和类。这是因为缺乏了编译单个java文件的环境，利用arthas可利用正在运行的jvm环境直接编译java文件。命令如下：
+``` bash
+mc -c 20ad9418 -d /home/sdww/target /home/sdww/test/ArthasTest.java
+```
+其中-c参数为类的classloader的hash值；-d为class文件输出目录
+
+### redine目标类，替换jvm中的原有类
+在Arthas中使用redefine命令替换jvm中的原有类：
+``` bash
+redefine -c 20ad9418 /home/sdww/target/com/sdww/downloaddemo/controller/ArthasTest.class
+```
+redefine方法的限制：
+
+1. 不允许新增field/method
+2. 正在跑的函数，没有退出不能生效
+
+替换后，通过浏览器调用demo()方法，可以看到日志已被添加：
+[arthas-add-log-result](../resources/img/arthas-add-log-result.png)
+
+经过AOP切面化的类也可如此操作
