@@ -1,0 +1,32 @@
+---
+layout: post
+title:  "Arthas"
+date:   2019-06-16 23:05:00 +0800
+categories: tools jvm arthas
+permalink: /tools/arthas
+description: java诊断工具Arthas介绍
+---
+
+## 背景
+工作中，部门内的同事常常会遇到需要定位线上问题的情况。如果能够根据日志直接定位出问题的根因是最理想的情况，但日志往往差的总是最关键的那一点内容，仅靠日志很难定位到每一个问题。
+这里给大家介绍一款阿里出品的开源诊断工具Arthas，并结合项目实际使用情况介绍其中的几个常用使用场景与解决方案：
+
+ - 在运行的jvm程序中动态添加日志打印信息
+ - 动态查询jvm程序中的某个值
+ - 追踪程序中耗时较长的方法
+
+## Arthas的安装与使用
+可参考Arthas官方使用文档：[Arthas中文文档](https://alibaba.github.io/arthas/)
+Arthas全量包下载：
+解压后直接执行java -jar arthas-boot.jar即可。进入arthas的命令行交互界面后，Arthas将展示目前机器上所运行的jvm程序，通过1234进行选择，Arthas将attach到目标进程上。此后才能执行Arthas后续的各项指令。
+
+
+## 在运行的jvm程序中动态添加日志打印信息
+此功能实现的原理是Arthas可通过JDK中的Instrumentation#redefineClasses方法直接替换JVM中的某个类，实现动态修改JVM中类的功能。
+因此，此功能不仅可以添加日志打印信息，还可以改变类中的运行逻辑！这里仅展示修改打印日志信息的相关方法。
+整个过程主要分为以下几步：
+
+1. 找到目标类的Classloader
+2. 修改目标类的java文件
+3. 编译目标类
+4. redine目标类，替换jvm中的原有类
