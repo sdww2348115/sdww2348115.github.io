@@ -111,9 +111,9 @@ watch com.sdww.downloaddemo.controller.ArthasTest count 'target.collection'
 Tips：每一次方法调用都打印两次的原因是我使用CGLIB这个类进行了AOP增强，因此com.sdww.downloaddemo.controller.ArthasTest将匹配两个类，两个实例
 
 说明：
-watch [触发类名] [触发方法名] [express]
-其中express中的target指的是调用时的目标对象。
-更多的express写法请参考[ognl](https://commons.apache.org/proper/commons-ognl/language-guide.html)
+
+1. watch [触发类名] [触发方法名] [express]。其中express中的target指的是调用时的目标对象。
+2. 更多的express写法请参考[ognl](https://commons.apache.org/proper/commons-ognl/language-guide.html)
 
 ## 追踪程序中耗时较长的方法
 在实际工作中，我们通常会遇到需要定位某个操作执行特别慢的情况。例如，agent发送某个报文后broker经过了数秒才返回。在这样的情况下，首先应找到整个过程中的入口，例如springboot项目中的controller方法，然后利用arthas的trace方法进行链路整体跟踪。
