@@ -101,9 +101,11 @@ watch com.sdww.downloaddemo.controller.ArthasTest count 'target.collection'
 调用ArthasTest.count()方法，打印结果分别如下：
 
 静态变量：
+
 ![arthas-watch-static](../resources/img/arthas-watch-static.png)
 
 普通变量：
+
 ![arthas-watch-inner](../resources/img/arthas-watch-inner.png)
 
 Tips：每一次方法调用都打印两次的原因是我使用CGLIB这个类进行了AOP增强，因此com.sdww.downloaddemo.controller.ArthasTest将匹配两个类，两个实例
