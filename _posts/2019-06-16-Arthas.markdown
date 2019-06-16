@@ -99,7 +99,11 @@ watch com.sdww.downloaddemo.controller.ArthasTest count '@com.sdww.downloaddemo.
 watch com.sdww.downloaddemo.controller.ArthasTest count 'target.collection'
 ```
 调用ArthasTest.count()方法，打印结果分别如下：
+
+静态变量：
 ![arthas-watch-static](../resources/img/arthas-watch-static.png)
+
+普通变量：
 ![arthas-watch-inner](../resources/img/arthas-watch-inner.png)
 
 Tips：每一次方法调用都打印两次的原因是我使用CGLIB这个类进行了AOP增强，因此com.sdww.downloaddemo.controller.ArthasTest将匹配两个类，两个实例
@@ -110,7 +114,7 @@ watch [触发类名] [触发方法名] [express]
 更多的express写法请参考[ognl](https://commons.apache.org/proper/commons-ognl/language-guide.html)
 
 ## 追踪程序中耗时较长的方法
-在实际工作中，我们通常会遇到需要定位某个操作执行特别慢的情况。例如，agent发送某个报文后，broker经过了数秒才返回。在这样的情况下，首先应找到整个过程中的入口，例如springboot项目中的controller方法，然后利用arthas的trace方法进行链路整体跟踪。
+在实际工作中，我们通常会遇到需要定位某个操作执行特别慢的情况。例如，agent发送某个报文后broker经过了数秒才返回。在这样的情况下，首先应找到整个过程中的入口，例如springboot项目中的controller方法，然后利用arthas的trace方法进行链路整体跟踪。
 
 如下，traceTest中分别调用了service中的method1与method2.其中method1将sleep线程1s后返回，method2将sleep线程2s后返回.
 ``` java
