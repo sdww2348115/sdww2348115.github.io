@@ -17,9 +17,9 @@ description: java诊断工具Arthas介绍
 
 ## Arthas的安装与使用
 可参考Arthas官方使用文档：[Arthas中文文档](https://alibaba.github.io/arthas/)
-Arthas全量包下载：
 解压后直接执行java -jar arthas-boot.jar即可。进入arthas的命令行交互界面后，Arthas将展示目前机器上所运行的jvm程序，通过1234进行选择，Arthas将attach到目标进程上。此后才能执行Arthas后续的各项指令。
 
+![arthasTest](../resources/img/arthas-attach.png)
 
 ## 在运行的jvm程序中动态添加日志打印信息
 此功能实现的原理是Arthas可通过JDK中的Instrumentation#redefineClasses方法直接替换JVM中的某个类，实现动态修改JVM中类的功能。
@@ -49,7 +49,7 @@ sc -d com.sdww.downloaddemo.controller.ArthasTest
 ```
 Arthas会返回该类的所有信息，如下图所示。请将最后一行所显示的`classLoaderHash`值记录下来，它标志着ArthasTest类由哪个Classloader所加载，在redefine时需要指定该参数。
 
-![arthasTest](../resources/img/arthas-attach.png)
+![arthasTest](../resources/img/arthas-class-info.png)
 
 ### 修改目标类的java源文件
 修改java源文件通常有两种方式：
@@ -95,3 +95,48 @@ redefine方法的限制：
 ![arthas-add-log-result](../resources/img/arthas-add-log-result.png)
 
 经过AOP切面化的类也可如此操作
+
+## 动态查询java程序中的某个值
+以ArthasTest为例，其中有两个变量
+``` java
+public static int INVOKE_COUNT = 0;
+public List<Object> collection = new LinkedList<>();
+```
+使用watch命令结合ognl表达式可动态修改对应的类，当某个实例的`指定方法`被调用时，arthas将打印出watch的值
+``` bash
+# 打印静态变量
+watch com.sdww.downloaddemo.controller.ArthasTest count '@com.sdww.downloaddemo.controller.ArthasTest@INVOKE_COUNT'
+# 打印普通变量
+watch com.sdww.downloaddemo.controller.ArthasTest count 'target.collection'
+```
+调用ArthasTest.count()方法，打印结果分别如下：
+![arthas-watch-static](../resources/img/arthas-watch-static.png)
+![arthas-watch-inner](../resources/img/arthas-watch-inner.png)
+
+Tips：每一次方法调用都打印两次的原因是我使用CGLIB这个类进行了AOP增强，因此com.sdww.downloaddemo.controller.ArthasTest将匹配两个类，两个实例
+
+说明：
+watch [触发类名] [触发方法名] [express]
+其中express中的target指的是调用时的目标对象。
+更多的express写法请参考[ognl](https://commons.apache.org/proper/commons-ognl/language-guide.html)
+
+## 追踪程序中耗时较长的方法
+在实际工作中，我们通常会遇到需要定位某个操作执行特别慢的情况。例如，agent发送某个报文后，broker经过了数秒才返回。在这样的情况下，首先应找到整个过程中的入口，例如springboot项目中的controller方法，然后利用arthas的trace方法进行链路整体跟踪。
+
+如下，traceTest中分别调用了service中的method1与method2.其中method1将sleep线程1s后返回，method2将sleep线程2s后返回.
+``` java
+    @GetMapping("/trace")
+    public String traceTest() {
+        service.method1();
+        service.method2();
+        return "OK";
+    }
+```
+在arthas中执行trace命令：
+``` bash
+# trace [target-class] [target-method]
+trace com.sdww.downloaddemo.controller.ArthasTest traceTest
+```
+然后调用该方法，可以看到arthas将整个方法的执行时间以及整个调用链上每一个方法的执行时间都进行了打印
+
+![arthas-trace-result](../resources/img/arthas-trace-result.png)
