@@ -48,7 +48,8 @@ Java程序在运行的过程中通常会有多个Classloader,程序中的类将�
 sc -d com.sdww.downloaddemo.controller.ArthasTest
 ```
 Arthas会返回该类的所有信息，如下图所示。请将最后一行所显示的`classLoaderHash`值记录下来，它标志着ArthasTest类由哪个Classloader所加载，在redefine时需要指定该参数。
-[arthasTest](../resources/img/arthas-attach.png)
+
+![arthasTest](../resources/img/arthas-attach.png)
 
 ### 修改目标类的java源文件
 修改java源文件通常有两种方式：
@@ -90,6 +91,7 @@ redefine方法的限制：
 2. 正在跑的函数，没有退出不能生效
 
 替换后，通过浏览器调用demo()方法，可以看到日志已被添加：
-[arthas-add-log-result](../resources/img/arthas-add-log-result.png)
+
+![arthas-add-log-result](../resources/img/arthas-add-log-result.png)
 
 经过AOP切面化的类也可如此操作
