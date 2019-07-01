@@ -21,3 +21,11 @@ description: alibaba天池中间件比赛
  - service含有自己的max_concurrent，即最大并发线程数
 
 其中avg_rtt与max_concurrent将随着时间的推移不断变化。
+
+很自然的，如果我们收集到承载service的硬件资源（CPU与内存）、avg_rtt以及max_concurrent参数，以及函数：EQPS = f(cpu, memory, avg_rtt, max_concurrent)。我们就能计算出每个service在一定时间内处理请求的期望值，按照这个期望值来分配请求即可达到一个比较理想的结果。
+
+方案实现拆解：
+
+ 1. load-balance需要能够对每个service做区分：最好的方式为load-balance层发现service注册后，自动为其分配一个ID，并将此ID传递给service，service缓存下来后每次发送请求时必须携带此ID。
+ 2. service需要能够获取到每个关键的参数值。
+ 3. service需要在这些参数值变化时及时通知load-balance（边缘触发）。
