@@ -1,0 +1,71 @@
+---
+layout: post
+title:  "HashMap若干问题"
+date:   2019-06-18 23:36:00 +0800
+categories: java jdk
+permalink: /jdk/HashMap
+description: HashMap若干问题
+---
+
+## HashMap是什么
+这里的HashMap特指JDK中java.util.HashMap类：它是一种用于存储的二元数据结构，其查询与修改的时间复杂度都是O(1).
+理论上的最好情况，所有数据经过hash后将整个存储结构全部占满，且相互之间没有冲突。此时查询与修改均只需要一次hash运算，时间复杂度为O(1)；反之为最坏情况：所有的key通过hash运算后的值完全相等，此时hashmap的时间复杂度将退化为与`解决冲突的数据结构`一致，在JDK1.7中，冲突节点将以链表形式存储，时间复杂度为O(n)；JDK1.8中，冲突节点大于阈值后将采用红黑树组装，时间复杂度为O(lgn)
+
+## HashMap的非线程安全性
+HashMap数据结构并未保证线程安全性（即使在JDK1.8对于HashMap进行优化后同样如此），在多线程的情况下并不能保证其按照预想的方式进行工作。其线程不安全性主要体现在以下两点：
+
+* 链表成环，查询时将造成死循环，迅速耗尽CPU资源（1.8得以修复）
+* 数据丢失/重复等
+
+### HashMap在多线程情况下链表成环，CPU死循环
+据个人考证，该问题出自于某阿里工程师的一次线上排查，由CPU飙升而定位至HashMap处。该问题的根本原因是多个线程同时执行resize()时，造成了部分节点的重复插入，最终导致链表成环。
+
+HashMap中resize的核心代码如下：
+``` java
+void transfer(Entry[] newTable, boolean rehash) {
+        int newCapacity = newTable.length;
+        for (Entry<K,V> e : table) {
+            while(null != e) {
+                Entry<K,V> next = e.next;
+                if (rehash) {
+                    e.hash = null == e.key ? 0 : hash(e.key);
+                }
+                int i = indexFor(e.hash, newCapacity);
+                //请注意这里采用了头
+                e.next = newTable[i];
+                newTable[i] = e;
+                e = next;
+            }
+        }
+    }
+```
+
+当两个线程同时执行链表插入操作时，可能导致同一个节点被往链表中添加了多次。当同时满足这两个条件时，就会出现链表成环的情况。
+
+开始时刻状态：
+SlotOld A-> B-> C
+SlotNew 
+
+线程1进入resize(),执行到将A的引用放入自己的栈空间时就释放了CPU。此时线程2进入resize()状态，并将整个过程执行完成。状态如下：
+SlotOld
+SlotNew C-> B-> A
+
+此时线程1将执行将NodeA插入SlotNew的逻辑：
+``` java
+A.next = C \\此时就已经造成环了
+SlotNew -> A
+```
+执行完后，状态如下：
+SlotNew A-> C-> B->A ....
+此时链表成环，程序一旦进入就将进入死循环状态，快速耗完所有CPU资源。
+
+### 数据丢失/重复等
+与上面类似，链表的插入主要分为两个步骤：
+``` java
+newNode.next = Node[i];
+Node[i] = newNode;
+```
+当两个线程同时执行这一插入操作时，且同时执行完成第一步后。它们都会尝试将Node[i]置为newNode，首先执行这一步骤的节点将丢失插入信息。
+
+###JDK1.8的优化
+通过使用一个tail引用的方式，并将HashMap的扩容更换为尾部插入的方式，Jdk1.8中的HashMap完美避免了1.7中成环的情况；但是数据丢失/重复的问题却仍未得到解决。
