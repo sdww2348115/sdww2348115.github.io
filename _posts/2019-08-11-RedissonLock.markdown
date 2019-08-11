@@ -13,7 +13,7 @@ RedissonLock全限名为`org.redisson.RedissonLock`，属于Redisson包中一个
 ## 继承关系与接口分析
 Redisson继承关系如下图所示：
 
-![redisson](../../resources/img/RedissonLock.png)
+![redisson](../resources/img/RedissonLock.png)
 
 从上图可以看出，Reddison主要继承了两个类/接口：
 
