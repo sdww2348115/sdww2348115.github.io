@@ -69,3 +69,92 @@ long remainTimeToLive();
 
 另：需要注意的是RedissonLock并未实现Lock中的newCondition()方法，该方法被调用后将会直接抛出UnsupportedOperationException.
 
+### RedissonExpirable
+
+从名字即可看出该类代表的是可过期的redisson对象，该类主要通过redis的过期策略实现。
+
+RedissonExpirable有两个重要参数:
+
+* CommandAsyncExecutor：用于控制过期，执行对应命令的executor
+* name:对象名称，实际上对应的是redis中的key值
+
+## Redisson重点方法分析
+
+作为一个典型排他锁的实现，Redisson中最重要的方法就是lock()与unlock().Redisson的构造方法只含有两个参数：CommandAsyncExecutor与name，其作用与含义与RedissonExpirable类似，这里就不再赘述了。
+
+### lock
+
+#### tryAquire语意实现
+RedissonLock利用Redis中的Hash作为分布式锁的核心结构。该Hash结构主要属性如下：
+
+* key：分布式锁名称，以String方式标记
+* key-val pair1：key为持有锁的线程id；val为该线程在该锁上的重入次数。
+* key的过期时间即为线程持有锁的时间
+
+Tips：
+
+使用不同方式调用lock的逻辑有一定程度区别:
+
+* 设置lock的最长调用时间：Redisson将在Redis中创建一个在指定时间后过期的Hash对象
+* 未指定lock最长持有时间：Redisson将定时更新Redis中的对象，保证其在用户程序主动调用前不会过期。Redisson采用HashedWheelTimer作为触发器控制程序的定时更新逻辑，关于HashedWheelTimer的说明请参考文章[HashedWheelTimer]
+
+Redisson中全局线程id的生成方式：每个jvm实例中的UUID + jvm内部线程id。可保证在分布式环境下的线程唯一。
+
+#### lock等待与通知
+
+lock的等待通知机制依赖于Redis的pub/sub实现。当进程获取锁资源失败时，将会注册一个对应key的listen回调：当Redisson收到pub消息的时候，会通过内部的dispatch机制筛选并通知对应的listenner。此时listener将会再次尝试获取锁资源，与其他锁不同的是，Redisson中借助了java中的semaphore对此进行了优化，再次获取锁资源失败后不会再次注册listen，而是转为监听嵌入至listen的semaphore再次等待唤醒。
+
+lock的等待与通知机制集中于方法subscribe()中
+```java
+    public RFuture<E> subscribe(String entryName, String channelName) {
+        AtomicReference<Runnable> listenerHolder = new AtomicReference<Runnable>();
+        //pubsubService中有一个简单的无冲突解决的AsyncSemaphore数据结构，这里只是简单从中获取一个
+        AsyncSemaphore semaphore = service.getSemaphore(new ChannelName(channelName));
+        //构造cancel的callback：当promise被cancell的时候，需要将AsyncSemaphore中的listener remove掉
+        RPromise<E> newPromise = new RedissonPromise<E>() {
+            @Override
+            public boolean cancel(boolean mayInterruptIfRunning) {
+                return semaphore.remove(listenerHolder.get());
+            }
+        };
+
+        //构建一个基础的pub/sub listener并放置进入redis connection中
+        Runnable listener = new Runnable() {
+
+            @Override
+            public void run() {
+                E entry = entries.get(entryName);
+                if (entry != null) {
+                    entry.aquire();
+                    semaphore.release();
+                    entry.getPromise().onComplete(new TransferListener<E>(newPromise));
+                    return;
+                }
+                
+                E value = createEntry(newPromise);
+                value.aquire();
+                
+                E oldValue = entries.putIfAbsent(entryName, value);
+                if (oldValue != null) {
+                    oldValue.aquire();
+                    semaphore.release();
+                    oldValue.getPromise().onComplete(new TransferListener<E>(newPromise));
+                    return;
+                }
+                
+                RedisPubSubListener<Object> listener = createListener(channelName, value);
+                service.subscribe(LongCodec.INSTANCE, channelName, semaphore, listener);
+            }
+        };
+        semaphore.acquire(listener);
+        listenerHolder.set(listener);
+        
+        return newPromise;
+    }
+```
+
+
+
+
+另：需要注意的是RedissonLock并未实现Lock中的newCondition()方法，该方法被调用后将会直接抛出UnsupportedOperationException.
+
