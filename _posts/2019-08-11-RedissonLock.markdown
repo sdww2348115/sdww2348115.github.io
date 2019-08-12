@@ -153,8 +153,13 @@ lock的等待与通知机制集中于方法subscribe()中
     }
 ```
 
+### unlock
 
+相比lock,unlock的逻辑非常简单，依次执行以下操作即可：
 
+1. 检查redis中的锁资源是否被当前线程所占有
+2. 将redis中锁资源的重入数-1
+3. 如果重入数等于0，则删除这个key，并向对应的queue中发送一条消息
+4. 最后，删除key的不断renew机制
 
-另：需要注意的是RedissonLock并未实现Lock中的newCondition()方法，该方法被调用后将会直接抛出UnsupportedOperationException.
 
