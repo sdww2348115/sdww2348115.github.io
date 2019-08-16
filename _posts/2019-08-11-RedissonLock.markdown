@@ -164,5 +164,7 @@ lock的等待与通知机制集中于方法subscribe()中
 
 
 ## 其他
-Redisson的RedisClient类底层通信使用netty实现，其所有的命令均是利用netty的promise异步实现，详情清参考netty与源码。
+
+* Redisson的RedisClient类底层通信使用netty实现，其所有的命令均是利用netty的promise异步实现，详情清参考netty与源码。
+* 由于模型的限制，RedissonLock默认情况下是非公平锁，并不能保证等待线程的FIFO特性。
 
