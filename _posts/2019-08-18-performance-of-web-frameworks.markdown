@@ -3,7 +3,7 @@ layout: post
 title:  "几种常见java web框架吞吐性能比较"
 date:   2019-08-18 00:14:00 +0800
 categories: java web spring webflux vertx play
-permalink: /network/performance
+permalink: /network/performanceOfFrameworkds
 description: 几种常见java web框架吞吐性能比较
 ---
 
