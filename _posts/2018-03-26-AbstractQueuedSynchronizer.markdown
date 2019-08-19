@@ -25,3 +25,39 @@ AbstractQueuedSynchronizer是由并发大师Doug Lea所开发的多线程同步�
 * 当前线程收到Interrupted信号
 
 所以当线程被唤醒后，会首先检查自己的状态，如果为interrupted，则将代表自己的节点从等待链表中取下来，再将自己的状态重置为interruptted。
+
+当执行取消某个线程等待方法cancelAcquire时。
+
+1. 将Node.thread置为null， ws置为CANCELLED，防止线程被唤醒
+2. 从Node开始，向前找到第一个未被取消的节点Node。这里需要分情况讨论：a.如果predNode是head节点或者处于需要传播的模式，就需要将node线程从Block状态唤醒，方便信号在链路上的传播，否则可能导致信号在传播的过程中丢失；b.如果后续节点处于未取消状态，则将后续节点挂到pred节点上，并把pred置为signal。（如果后续节点处于取消状态，则不用作任何事，因为后续节点的cancell会自动将对应的Node挂到正确的位置上去）
+
+## 部分实现细节
+
+* 所有节点所保存的ws是后续节点的等待状态，只有signle表示需要唤醒。
+* 如果为共享模式，当线程获取临界资源成功后，会根据自身状态以及后续节点状态进行判断，并在适当时候唤醒后续节点。
+* aquire与aquireInterruptibly的区别在于：当线程检查到自己获取到intterrupted信号后，Interruptibly相关接口会抛出线程中断异常。
+* 在ReentrantLock中，如果设置锁为fair，则在tryAquire()使用CAS标记占用临界区资源前会首先检查队列中是否存在比自己等待更久的节点。
+
+
+## Condition相关
+
+Condition相关语意是对Object.wait()与Object.notify()的补全。Condition仅支持排他锁，共享锁模式下不支持。作为一个内部类，ConditionObject实现了condition的所有方法，在其内部同样使用了head与tail两个指针实现了一个condition链表，保存有所有调用condition.wait()方法的线程以及节点。
+
+与Object.wait()类似，condition.wait()方法被调用后主要执行以下几个操作：
+
+1. 检查线程是否处于Intterrupted状态
+2. 释放lock相关资源
+3. 在Condition队列上创建Node节点
+4. 再次检查线程状态并进入Blocking状态
+
+如果线程被唤醒：
+
+1. 检查自己被唤醒的原因，是否需要抛出Intterrupted异常
+2. 将condition队列上的节点取下来，并将节点注册至临界区等待线程处
+3. 后续与普通线程等待差不多，获取到临界区资源后即可继续执行后续逻辑
+
+主要是通过多次对线程状态的检查实现了对Intterruptd的支持
+
+* Tips：Condition中的signal()仅会唤醒处于第一个位置处的节点，不会像Object.notify()随机唤醒节点。
+
+## Read/Write 额外处理
