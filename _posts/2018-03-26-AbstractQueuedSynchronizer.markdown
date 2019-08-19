@@ -61,3 +61,51 @@ Condition相关语意是对Object.wait()与Object.notify()的补全。Condition�
 * Tips：Condition中的signal()仅会唤醒处于第一个位置处的节点，不会像Object.notify()随机唤醒节点。
 
 ## Read/Write 额外处理
+
+1. ReadWriteLock中采用一个int记录等待readlock/writelock的线程数量：其中高16位为shared线程数，获取方法为 c >>> SHARED_SHIFT; 低16位为等待独占锁的线程数，获取方式为 c & ((1 << SHARED_SHIFT) - 1)
+
+独占锁tryAquire的逻辑如下：
+``` java
+protected final boolean tryAcquire(int acquires) {
+            /*
+             * Walkthrough:
+             * 1. If read count nonzero or write count nonzero
+             *    and owner is a different thread, fail.
+             * 2. If count would saturate, fail. (This can only
+             *    happen if count is already nonzero.)
+             * 3. Otherwise, this thread is eligible for lock if
+             *    it is either a reentrant acquire or
+             *    queue policy allows it. If so, update state
+             *    and set owner.
+             */
+            Thread current = Thread.currentThread();
+            //获取ReadWriteLock的整体status C
+            int c = getState();
+            //获取ReadWriteLock的独占锁重入次数 w
+            int w = exclusiveCount(c);
+            //当ReadWriteLock被独占/共享锁占有时，只有锁被当前线程持有且小于重入次数，此时直接记录重入次数
+            if (c != 0) {
+                // (Note: if c != 0 and w == 0 then shared count != 0)
+                // 此时ReadWriteLock被读锁占有，获取失败
+                if (w == 0 || current != getExclusiveOwnerThread())
+                    return false;
+                if (w + exclusiveCount(acquires) > MAX_COUNT)
+                    throw new Error("Maximum lock count exceeded");
+                // Reentrant acquire
+                setState(c + acquires);
+                return true;
+            }
+            //非公平情况下直接尝试修改status，尝试获取临界资源，随后修改ownerThread为当前线程，返回true
+            if (writerShouldBlock() ||
+                !compareAndSetState(c, c + acquires))
+                return false;
+            setExclusiveOwnerThread(current);
+            return true;
+        }
+```
+
+与独占式锁类似，共享锁的获取方式基本一样，只是多了额外两个步骤：
+
+1. 共享锁在获取的时候需要check链表中第一个Node是否为独占锁等待，如果是，则tryAquire返回-1，在独占锁的后续进行排队。
+2. 由于持有锁资源的线程可能不止一个，因此不同的线程在处理锁重入次数时有所不同：1.第一个获取读锁的线程将自己的重入次数放入firstReaderHoldCount中，并将firstReader设为当前线程；2.其他线程将重入次数放入ThreadLocal数据结构中。
+3. 共享锁在释放时的处理方式同样分为两种：1. 如果当前线程为firstReader，如果重入次数完全释放，直接将firstReader置为null，并把firstReaderHoldCount置为0；2.如果当前线程并非为firstReader，则会将自己热threadlocal变量从threadLocalMap中移除。
