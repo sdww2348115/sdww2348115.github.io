@@ -179,6 +179,7 @@ private V doPut(K key, V value, boolean onlyIfAbsent) {
                 level = max + 1; // hold in array and later pick the one to use
                 @SuppressWarnings("unchecked")Index<K,V>[] idxs =
                     (Index<K,V>[])new Index<?,?>[level+1];
+                //从下至上构建基于插入node的Index数组
                 for (int i = 1; i <= level; ++i)
                     idxs[i] = idx = new Index<K,V>(z, idx, null);
                 for (;;) {
@@ -188,6 +189,7 @@ private V doPut(K key, V value, boolean onlyIfAbsent) {
                         break;
                     HeadIndex<K,V> newh = h;
                     Node<K,V> oldbase = h.node;
+                    //插入node的Index数组可能比原来head的level高了不止1层，需要依次进行添加
                     for (int j = oldLevel+1; j <= level; ++j)
                         newh = new HeadIndex<K,V>(oldbase, newh, idxs[j], j);
                     if (casHead(h, newh)) {
@@ -204,16 +206,19 @@ private V doPut(K key, V value, boolean onlyIfAbsent) {
                 for (Index<K,V> q = h, r = q.right, t = idx;;) {
                     if (q == null || t == null)
                         break splice;
+                    //从左至右找到Index可插入的目标地址
                     if (r != null) {
                         Node<K,V> n = r.node;
                         // compare before deletion check avoids needing recheck
                         int c = cpr(cmp, key, n.key);
+                        //这里再次进行check，防止后续节点n已经被删除
                         if (n.value == null) {
                             if (!q.unlink(r))
                                 break;
                             r = q.right;
                             continue;
                         }
+                        //向后继续查找
                         if (c > 0) {
                             q = r;
                             r = r.right;
@@ -221,6 +226,7 @@ private V doPut(K key, V value, boolean onlyIfAbsent) {
                         }
                     }
 
+                    //每次仅对一个level的Index链表进行插入，这里检查的就是当前level是否与目标level相等
                     if (j == insertionLevel) {
                         if (!q.link(r, t))
                             break; // restart
@@ -232,6 +238,7 @@ private V doPut(K key, V value, boolean onlyIfAbsent) {
                             break splice;
                     }
 
+                    //insertionLevel小于j，则level下移，处理下一层的插入操作
                     if (--j >= insertionLevel && j < level)
                         t = t.down;
                     q = q.down;
@@ -242,3 +249,83 @@ private V doPut(K key, V value, boolean onlyIfAbsent) {
         return null;
     }
 ```
+
+## 删除
+
+ConcurrentSkipList的删除操作最核心的仍然是查找目标node，随后检查并发问题并进行删除。
+
+```java
+final V doRemove(Object key, Object value) {
+        if (key == null)
+            throw new NullPointerException();
+        Comparator<? super K> cmp = comparator;
+        outer: for (;;) {
+            for (Node<K,V> b = findPredecessor(key, cmp), n = b.next;;) {
+                Object v; int c;
+                // 有其他线程正在执行删除操作，重新进行处理
+                if (n == null)
+                    break outer;
+                Node<K,V> f = n.next;
+                // 有其他线程正在执行插入操作，重新进行处理
+                if (n != b.next)                    // inconsistent read
+                    break;
+                if ((v = n.value) == null) {        // n is deleted
+                    n.helpDelete(b, f);
+                    break;
+                }
+                if (b.value == null || v == n)      // b is deleted
+                    break;
+                if ((c = cpr(cmp, key, n.key)) < 0)
+                    break outer;
+                // 此时有另外的插入节点操作已经成功，需要b，n节点均往后移动一位
+                if (c > 0) {
+                    b = n;
+                    n = f;
+                    continue;
+                }
+                //判断value是否满足删除的需求
+                if (value != null && !value.equals(v))
+                    break outer;
+                if (!n.casValue(v, null))
+                    break;
+                if (!n.appendMarker(f) || !b.casNext(n, f))
+                    findNode(key);                  // retry via findNode
+                else {
+                    findPredecessor(key, cmp);      // clean index
+                    if (head.right == null)
+                        //请注意这里，见代码块后续部分
+                        tryReduceLevel();
+                }
+                @SuppressWarnings("unchecked") V vv = (V)v;
+                return vv;
+            }
+        }
+        return null;
+    }
+    
+    /**
+      删除数据节点需要同时至删除所有指向该数据节点的Index节点，如果恰好该Index节点又属于某些高层level唯一的节点，则需要将这些level的Index删掉。即删除最顶上n层的Index节点。
+      如果有其他线程正在同时进行节点的插入操作，且插入操作同时触发了level增加时，该方法可能会导致错误产生。（即丢失较为顶层的部分Index节点）
+      为了预防错误，重置level的只会对3层以上的ConcurrentSkipListMap进行，且必须连续三层header的next均为null时才会进行。在使用cas重置header节点后还会再次进行检查，如果被替换的header.next不为null时，将会滚原header指向的对象。
+      仍然会出错的场景：假设此时ConcurrentSkipList的level为5，有另一个线程正在执行插入操作，并且会将该SkipList的level拉满直到6，当前线程需要将level降低到4，即使回滚依然会将level回滚为5，新插入节点的顶层index就丢失了。
+    **/
+    private void tryReduceLevel() {
+        HeadIndex<K,V> h = head;
+        HeadIndex<K,V> d;
+        HeadIndex<K,V> e;
+        if (h.level > 3 &&
+            (d = (HeadIndex<K,V>)h.down) != null &&
+            (e = (HeadIndex<K,V>)d.down) != null &&
+            e.right == null &&
+            d.right == null &&
+            h.right == null &&
+            casHead(h, d) && // try to set
+            h.right != null) // recheck
+            casHead(d, h);   // try to backout
+    }
+```
+
+## 总结
+
+1. ConcurrentSkipListMap可认为是TreeMap的高并发版本
+2. ConcurrentSkipListMap在高并发情况下的插入/删除仅能保证数据节点的插入一定正确，但不保证Index节点一定正确，但是能够保证数据一定能够被检索到
