@@ -58,4 +58,29 @@ binlog有3种记录格式：
 * mix:综合了以上二者的优缺点，平时采用statement记录，某些情况下采用raw格式记录。
 
 ### RedoLog
-引入redolog的主要目的是提升数据库修改效率，将磁盘的随机读写操作转化为顺序读写操作，大大加快数据落地的速度。
+引入redolog的主要目的是提升数据库修改效率，将磁盘的随机读写操作转化为顺序读写，大大加快磁盘数据落地的速度。
+
+从日志记录格式来看，与binlog的逻辑语句不同，redolog记录的是'数据文件的修改内容'，是经过解析后的SQL语句对数据库文件的实际修改；redolog记录的数具有幂等性，同一条redolog无论应用多少次对于数据文件的修改结果都是一样的（这是innodb数据恢复的基础之一）。
+
+记录redolog时，MYSQL会按照如下流程依次进行写入：`MYSQL用户态logbuffer`->`操作系统系统系统态buffer`->`计算机磁盘`
+
+![redoLog](../resources/img/redoLog.png)
+
+根据MYSQL参数`innodb_flush_log_at_trx_commit`值的不同，MYSQL对于redolog的处理方式也不一样
+
+* 值为0：事务每次提交时log写入用户态的logbuffer中，程序崩溃或者系统宕机会导致部分数据丢失
+* 值为1：事务每次提交时log写入系统buffer，并立即使用fsync()系统调用将其刷入磁盘
+* 值为2：事务每次提交时log写入系统buffer，程序崩溃时数据不会丢失，但是系统宕机会导致部分数据丢失。（Kafka所采用的存储方式）
+
+由于内存拷贝与系统刷盘均需要一定时间，因此不同位置处所记录的redolog进度也不一定相同，MYSQL采用了以下几个参数记录不同位置处的redolog进度：
+
+* `log sequence number`记录的是用户态内存中redolog的进度
+* `log flushed up to`写入os buffer中redolog的进度
+* `pages flushed up to`已经通过fsync刷入磁盘的redolog进度
+* `last checkpoint at`checkpoint当前位置
+
+以上几个值被成为LSN(log sequence number)，由于log文件是由用户态内存到系统态内存再到磁盘文件，因此以上几个LSN从上到下依次递减。
+
+当redolog所记录的修改被应用至数据文件之后，redolog的生命周期就完结了，此时mysql就会将checkpoint的值往后推进，表示checkpoint之前的redolog都已被应用至数据文件。
+
+一个mysql进程共享redolog文件(ib_data.log)，参数`innodb_log_files_in_group`可指定redolog文件的数量，参数`innodb_log_file_size`可指定每一个logfile的大小。mysql总共可记录的logfile数据量约为 每个log文件大小 * log文件数。每个log文件的开头都会留有一定空白用于记录meta信息，当redolog记录达到最后一个log文件的末尾时，MYSQL又会从头开始记录log，类似于ring类型的结构。
