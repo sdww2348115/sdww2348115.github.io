@@ -84,3 +84,21 @@ binlog有3种记录格式：
 当redolog所记录的修改被应用至数据文件之后，redolog的生命周期就完结了，此时mysql就会将checkpoint的值往后推进，表示checkpoint之前的redolog都已被应用至数据文件。
 
 一个mysql进程共享redolog文件(ib_data.log)，参数`innodb_log_files_in_group`可指定redolog文件的数量，参数`innodb_log_file_size`可指定每一个logfile的大小。mysql总共可记录的logfile数据量约为 每个log文件大小 * log文件数。每个log文件的开头都会留有一定空白用于记录meta信息，当redolog记录达到最后一个log文件的末尾时，MYSQL又会从头开始记录log，类似于ring类型的结构。
+
+### undolog
+
+undolog作用主要有两个：1、保证数据库事务的原子性（提供回滚功能）；2、保证数据库事务的隔离性（MVCC）。
+
+当数据库启动一个修改事务时，每次修改不仅会记录下对应的redolog，同时也会记录对应的undolog。每一条undolog都是对应redolog的"反操作"，在执行redolog后再执行相对的undolog可使数据恢复至未修改的状态。MYSQL通过创建read view + redolog的方式可以实现RR级别的数据库事务隔离级别；通过链式执行对应redolog同样可以实现回滚操作。
+
+对于不同的操作，undolog的记录方式有所不同：
+
+* insert语句：MYSQL会记录一条对应的delete语句
+* delete语句：MYSQL会记录一条对应的insert语句
+* update语句：
+** 更新列不为主键：直接记录一条与修改相反的update语句
+** 更新列为主键：update将分为两个过程：首先记录一条delete语句，再记录一条insert语句
+
+其中insert的undolog在事务提交/回滚后可立即删除，但是update的undolog却不可以，其他事务可能依赖于此构建历史版本信息。
+
+每行的数据都含有一个隐藏字段：tx_version，事务启动的时候会生成一个read-view（事务的第一条执行语句或者手动指定），通过比对当前活跃的最早事务id、最晚事务id以及当前事务id即可得到当前事务的read-view。
