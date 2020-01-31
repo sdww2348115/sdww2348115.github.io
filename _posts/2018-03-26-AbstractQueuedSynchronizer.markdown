@@ -1,78 +1,111 @@
 ---
 layout: post
-title:  "AbstractQueuedSynchronizer"
-categories: source
-permalink: /source/AQS
+title:  "AbstractQueuedSynchronizer剖析"
+categories: java juc concurrent
+permalink: /concurrent/AQS
+description: AbstractQueuedSynchronizer源码剖析
 ---
 
-# AbstractQueuedSynchronizer是什么
-AbstractQueuedSynchronizer(下文简称AQS)是Doug Lea大师所写的并发工具类之一，它通过queue的方式提供了一整套线程资源竞争/同步的基本模式，是各种Lock接口实现类/并发工具类的基石。
+## 背景
+AbstractQueuedSynchronizer是由并发大师Doug Lea所开发的多线程同步工具框架。该数据结构主要用于解决同步环境下多线程的blocking等待调度机制，包括独占锁的等待唤醒、并发锁的等待唤醒、以及codition队列等。JUC中许多工具都是利用AQS实现：例如ReentrantLock、ReadWriteLock、CountDownLatch、Semaphore等。
 
-# AQS的诞生背景及目的
+## 核心原理
 
-在ReentrantLock等各种并发工具类被开发出来之前，JAVA的多线程同步方式为：synchronized关键字，Object.wait()方法，Object.notify()方法以及Object.notifyAll()方法。其中synchronized关键字解决的是多线程环境下资源的竞争问题（Lock语义），wait/notify系方法解决的是线程之间同步的问题。(这里不讨论volatile关键字以及CAS方法，因为volatile关键字在JDK1.5之前其内存语义并不能保证happens-before语义，仅提供了内存的可见性保证；而CAS关键字也无法考证其被正式大规模应用的版本)
+利用AbstractQueuedSynchronizer，线程获取临界资源失败并等待的原理如下：
 
-针对最基本的synchronized关键字而言，它能够解决大多数情况下的临界区的问题，但是功能相对孱弱：
-1. 一旦进入synchronized关键字逻辑，线程将进入blocking等待的过程，无法响应中断。在某些条件下，在长时间获取不到锁的情况下我们可能需要手动中断线程尝试获取临界区资源的行为。
-2. 无法实现异步获取锁的行为，即tryLock然后立即返回true \|\| false；也无法实现获取锁时超时中断的功能。（此条可认为是1的补充）
-3. synchronized关键字在多线程竞争临界区资源时不可控。通俗来说，synchronized关键字无法提供AQS的fair语义。
+* 使用原子操作尝试获取临界区访问权限，如果成功，则直接往后运行
+* 如果失败，则使用Node将当前线程、需要获取的临界资源以及等待状态以链表Node形式进行封装，并放入当前AQS的队列末尾
+* 再次check是否能够获取临界资源（这里也可以理解为手动触发一次唤醒操作），目的是防止在构建Node并添加至队列的过程中丢失唤醒信号
+* 检查当前线程是否应该进入block状态：1.有可能前面部分等待的Node已经处于cancel状态了，但仍然未被清理，这时当前线程同样应负责进行清理操作；2.当前线程之前的节点处于condition或者shared模式，这时需要告诉前面的线程后续需要一个唤醒信号
+* 线程按照预设逻辑将自己挂起并等待唤醒
 
-解决了以上诸多问题的"加强版"资源竞争工具就是Lock接口类的各种实现，它们所共有的实现思路是：将JVM中Object Monitor相关的逻辑用JAVA代码实现，在这基础上为源代码增添了可以中断，异步获取，超时获取等功能。其中最典型的即为ReentrantLock类，它在JAVA语言的层面上完整实现了JVM层次的synchronized语义。再将所有Lock所共有的行为模式抽象出来，就是本文的中心：AbstractQueuedSynchronizer类。
-    
-将运行着的JAVA程序分为两层：底层为JVM虚拟机，上层为可控JAVA代码的话，可以认为AQS就是JAVA代码层的synchronized关键字。JVM所提供的wait/notify等方法与synchronized关键字息息相关：1.wait/notify方法必须被包含在synchronized语法块中；2.wait方法涉及到线程释放对应的锁资源。所以，要让AQS能够替代synchronize，必须实现线程之间的同步解决方案，即AQS的Condition模块。
-    
-AQS的功能大致可以分为这么两块：1.多线程竞争临界区资源；2.多线程同步方案。本文将分别从这两个方面来介绍AQS。
+挂起线程被唤醒时有以下几种情况：
 
-# 多线程竞争临界区资源
-AQS对于多线程竞争临界区资源的实现主要依靠队列``sync queue``实现。它是一种CLH队列的变种，只有队列头节点的线程能够进入临界区，CLH队列通过自旋的方式等待前一个节点释放资源，而sync queue则是通过blocking的方式等待。当线程退出临界区的时候会唤醒后一个节点，让后续的线程依次进入临界区执行。sync queue中Node的数据结构如下（包括Condition部分代码）
-```java
-//除Header外，每一个Node代表的都是一个等待临界区资源的线程
-static final class Node {
+* 某线程释放了临界区资源，唤起当前线程尝试进行抢夺
+* 当前线程收到Interrupted信号
 
-        /*********** waitStatus 相关 *************/
-        //waitStatus 状态，代表该Node被取消
-        static final int CANCELLED =  1;
-        //waitStatus 状态，代表该节点的后续节点等待该节点完成
-        static final int SIGNAL    = -1;
-        //waitStatus 状态，代表该节点为Condition节点，应处于Condition Queue中
-        static final int CONDITION = -2;
-        //waitStatus 状态，代表当唤醒该节点时，还要唤醒后续节点
-        static final int PROPAGATE = -3;
-        //标识当前Node所处状态
-        volatile int waitStatus;
-        
-        /*********** prev/next 相关 *************/
-        //指向queue中前一个节点
-        volatile Node prev;
-        //指向queue中后一个节点
-        volatile Node next;
-        
-        //返回该节点的前驱节点
-        final Node predecessor() throws NullPointerException {
-            Node p = prev;
-            if (p == null)
-                throw new NullPointerException();
-            else
-                return p;
+所以当线程被唤醒后，会首先检查自己的状态，如果为interrupted，则将代表自己的节点从等待链表中取下来，再将自己的状态重置为interruptted。
+
+当执行取消某个线程等待方法cancelAcquire时。
+
+1. 将Node.thread置为null， ws置为CANCELLED，防止线程被唤醒
+2. 从Node开始，向前找到第一个未被取消的节点Node。这里需要分情况讨论：a.如果predNode是head节点或者处于需要传播的模式，就需要将node线程从Block状态唤醒，方便信号在链路上的传播，否则可能导致信号在传播的过程中丢失；b.如果后续节点处于未取消状态，则将后续节点挂到pred节点上，并把pred置为signal。（如果后续节点处于取消状态，则不用作任何事，因为后续节点的cancell会自动将对应的Node挂到正确的位置上去）
+
+## 部分实现细节
+
+* 所有节点所保存的ws是后续节点的等待状态，只有signle表示需要唤醒。
+* 如果为共享模式，当线程获取临界资源成功后，会根据自身状态以及后续节点状态进行判断，并在适当时候唤醒后续节点。
+* aquire与aquireInterruptibly的区别在于：当线程检查到自己获取到intterrupted信号后，Interruptibly相关接口会抛出线程中断异常。
+* 在ReentrantLock中，如果设置锁为fair，则在tryAquire()使用CAS标记占用临界区资源前会首先检查队列中是否存在比自己等待更久的节点。
+
+
+## Condition相关
+
+Condition相关语意是对Object.wait()与Object.notify()的补全。Condition仅支持排他锁，共享锁模式下不支持。作为一个内部类，ConditionObject实现了condition的所有方法，在其内部同样使用了head与tail两个指针实现了一个condition链表，保存有所有调用condition.wait()方法的线程以及节点。
+
+与Object.wait()类似，condition.wait()方法被调用后主要执行以下几个操作：
+
+1. 检查线程是否处于Intterrupted状态
+2. 释放lock相关资源
+3. 在Condition队列上创建Node节点
+4. 再次检查线程状态并进入Blocking状态
+
+如果线程被唤醒：
+
+1. 检查自己被唤醒的原因，是否需要抛出Intterrupted异常
+2. 将condition队列上的节点取下来，并将节点注册至临界区等待线程处
+3. 后续与普通线程等待差不多，获取到临界区资源后即可继续执行后续逻辑
+
+主要是通过多次对线程状态的检查实现了对Intterruptd的支持
+
+* Tips：Condition中的signal()仅会唤醒处于第一个位置处的节点，不会像Object.notify()随机唤醒节点。
+
+## Read/Write 额外处理
+
+1. ReadWriteLock中采用一个int记录等待readlock/writelock的线程数量：其中高16位为shared线程数，获取方法为 c >>> SHARED_SHIFT; 低16位为等待独占锁的线程数，获取方式为 c & ((1 << SHARED_SHIFT) - 1)
+
+独占锁tryAquire的逻辑如下：
+``` java
+protected final boolean tryAcquire(int acquires) {
+            /*
+             * Walkthrough:
+             * 1. If read count nonzero or write count nonzero
+             *    and owner is a different thread, fail.
+             * 2. If count would saturate, fail. (This can only
+             *    happen if count is already nonzero.)
+             * 3. Otherwise, this thread is eligible for lock if
+             *    it is either a reentrant acquire or
+             *    queue policy allows it. If so, update state
+             *    and set owner.
+             */
+            Thread current = Thread.currentThread();
+            //获取ReadWriteLock的整体status C
+            int c = getState();
+            //获取ReadWriteLock的独占锁重入次数 w
+            int w = exclusiveCount(c);
+            //当ReadWriteLock被独占/共享锁占有时，只有锁被当前线程持有且小于重入次数，此时直接记录重入次数
+            if (c != 0) {
+                // (Note: if c != 0 and w == 0 then shared count != 0)
+                // 此时ReadWriteLock被读锁占有，获取失败
+                if (w == 0 || current != getExclusiveOwnerThread())
+                    return false;
+                if (w + exclusiveCount(acquires) > MAX_COUNT)
+                    throw new Error("Maximum lock count exceeded");
+                // Reentrant acquire
+                setState(c + acquires);
+                return true;
+            }
+            //非公平情况下直接尝试修改status，尝试获取临界资源，随后修改ownerThread为当前线程，返回true
+            if (writerShouldBlock() ||
+                !compareAndSetState(c, c + acquires))
+                return false;
+            setExclusiveOwnerThread(current);
+            return true;
         }
-        
-        /*********** 该Node所包装的thread *************/
-        volatile Thread thread;
-        
-        /*********** nextWaiter 相关 *************/
-        //仅用于sync queue，代表Node为共享式
-        static final Node SHARED = new Node();
-        //仅用于sync queue，代表Node为独占式
-        static final Node EXCLUSIVE = null;
-        //nextWaiter在不同的queue中有不同的含义
-        // 1.在sync queue中，它保存的是Node的状态(独占/共享)
-        // 2.在condition queue中，它保存的是下一个Node的引用
-        Node nextWaiter;
-        
-        //返回sync queue中该Node是否为共享模式
-        final boolean isShared() {
-            return nextWaiter == SHARED;
-        }
-
-    }
 ```
+
+与独占式锁类似，共享锁的获取方式基本一样，只是多了额外两个步骤：
+
+1. 共享锁在获取的时候需要check链表中第一个Node是否为独占锁等待，如果是，则tryAquire返回-1，在独占锁的后续进行排队。
+2. 由于持有锁资源的线程可能不止一个，因此不同的线程在处理锁重入次数时有所不同：1.第一个获取读锁的线程将自己的重入次数放入firstReaderHoldCount中，并将firstReader设为当前线程；2.其他线程将重入次数放入ThreadLocal数据结构中。
+3. 共享锁在释放时的处理方式同样分为两种：1. 如果当前线程为firstReader，如果重入次数完全释放，直接将firstReader置为null，并把firstReaderHoldCount置为0；2.如果当前线程并非为firstReader，则会将自己热threadlocal变量从threadLocalMap中移除。
