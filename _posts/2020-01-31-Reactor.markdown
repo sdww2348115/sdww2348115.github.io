@@ -58,3 +58,52 @@ for (socket in connectionPool) {
 
 ## Reactor模型
 
+使用select/poll/epoll解决了nio网络传输问题之后，接下来需要优化的点在于如何解决大量线程切换带来的开销。Reactor模型的核心思想在于如何减少线程切换带来的开销，设计出一套适合nio模型的`线程调度机制`。
+
+## 单线程模型Reactor
+利用fd的非阻塞调用，我们可以把原BIO模型中的所有普通socket监听函数使用NIO的方式交给一个线程执行。按照普通的程序设计，程序需要至少两个线程：
+
+ 1. 处理监听端口accept事件的线程
+ 2. 处理socket端口数据到来的线程
+
+两个线程交替执行，共同完成工作。在单核处理器的情况下，线程频繁切换所带来的开销不可忽视：除上一章所讨论的内核/用户态切换所带来的额外开销外，还有保存线程上下文/操作系统采用调度算法/CPU cache失效等其他开销。
+
+> 目前计算机界对于高并发环境的主要优化方向之一便是：尽量减少程序运行过程中的线程切换次数，尽可能利用CPU的cache加快运行速度和效率
+
+能否将这两个线程的功能做到一个线程中执行？答案是肯定的，核心原因是在NIO的系统调用过程中，`等待监听端口处于acceptable，等待socket连接处于readable/writable可以被注册至同一个Selector中`。这是EventLoop，Reactor模型以及多路事件分发器的先决条件。利用这一特性，工作线程可同时wait在accept以及read/write处，任一事件处于就绪状态都可唤醒线程。
+
+[multi-dispatch](../resources/img/multi-dispatch-1.png)
+
+如上图所示，线程会在可以调用acceptable/readable/writable时得到提示，从阻塞状态重新进入可执行状态。程序中通常将触发线程从阻塞状态转到可运行状态的变化封装为一个Event，通过队列的方式将这些Event组织起来，并通过一个叫做dispatcher的组件派发至对应的handler进行处理。这样，利用一个简单的switch语句或者if/else语句就可以实现所有handler,dispatcher工作由同一个线程来驱动。(这里带有一点协程的思想：即使用状态机的方式在用户态实现任务的调度)
+
+> Redis，NodeJS采用该模型Reactor。
+
+## 多线程模型Reactor
+
+[准确说来，Reactor模式的定义只有单线程模型一种](https://en.wikipedia.org/wiki/Reactor_pattern)，在实际的使用过程中，单线程模型的Reactor存在以下几个缺点：
+
+1. 无法利用计算机多核并行处理的优势
+2. 按照一般的程序设计，数据的返回通常会做到READ的处理流程之中，所以事件分发器通常只会分发acceptable/readable事件，对于这两个事件而言，通常accept需要更快的被处理（connect的超时相对较短），在任务较重的情况下，可能存在线程饥饿的问题。
+
+将线程池技术引入到单线程Reactor模型中可以迅速解决问题1：dispatcher分发任务时，将handler与event封装为task异步交给线程池处理（Doug Lea老爷子中的模型2）。从线程与数据的角度来看，任意一个Event到来后，它首先在dispatcher的线程中转了一圈，然后被分发至线程池中的工作线程执行后续操作。中间涉及到了：Task对象的创建、进出task队列时的锁、不同线程切换与调度等多个耗时操作，并不满足Reactor模型高性能的要求。更好的解决方案是直接将整个Reactor模型进行复制，让其在线程池中运行，利用锁等同步工具来解决并发导致的同步问题。如多个线程并发操作同一个连接导致的线程不安全问题。
+
+[multithread-reactor](../resources/img/multi-reactor.png)
+
+如上图所示，红色部分代表将事件处理的Handler放入线程池中执行的方案(Doug lea以及网上大多数博客的方案),绿色部分代表将handler与dispatcher一起放入线程池中的方案（Nginx多进程模式，Netty只设置了一个EventloopGroup时的模式均采用此方案）。个人认为：Doug Lea的nio PPT更倾向于向大家描述和介绍Reactor模型，与实际各个框架所使用的多线程Reactor模型存在一定差异。
+
+问题2的解决更为简单，既然两种event的处理方式不一样，那么直接拆分为两个Reactor：处理accept的reactor以及处理read的reactor。在实际的使用场景中，虽然此方案能够加快accept的效率，但是从程序整体上看两个线程池加大了线程的调度频率，系统整体的吞吐量较上一种方案更小，因此该方案多用于对连接建立时间敏感的场景。Netty中，含有两个EventloopGroup的server程序使用的就是这种模型。
+
+## Reactor的理想使用环境以及注意事项
+
+从上面的分析可知：Reactor模型是一种设计模式，与nio适配，目的是提供比传统IO模型更大并发连接数、降低传统IO延时的功能。它最核心的思想是尽量减少线程切换带来的系统开销。于此我们简单推论就可得出：Reactor模型最理想的使用场景就是每个线程都工作在一个CPU内核上，完全不存在任何线程调度的情况。(这就是Nginx为什么推荐workerprogress参数设置为CPU内核数的原因。）
+
+在使用Reactor模型时，我们最需要注意的点就是不要在eventloop中写入会导致线程阻塞的任何语句。通常来说，eventloop中的逻辑应足够轻量，线程能够在不切换的情况下很快完成计算并进入下一个循环。如果在eventloop中执行了较重的阻塞性语句，其他工作线程也无法运行在此内核上，无法充分利用CPU计算资源；同时，还会导致后续event也处于'等待'的状态中，导致同一序列中后续事件得不到处理，极大的影响系统性能与吞吐。
+
+## Reference
+
+1. [Scalable IO in Java](http://gee.cs.oswego.edu/dl/cpjslides/nio.pdf)
+2. [Reactor pattern](https://en.wikipedia.org/wiki/Reactor_pattern)
+3. [【NIO系列】——之Reactor模型](https://my.oschina.net/u/1859679/blog/1844109)
+4. [为什么系统调用比普通的函数调用更耗时？用户态和内核态切换的代价在哪？](https://segmentfault.com/q/1010000000522752)
+5. [大话 Select、Poll、Epoll](https://cloud.tencent.com/developer/article/1005481)
+
