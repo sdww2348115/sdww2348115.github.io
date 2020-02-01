@@ -72,7 +72,7 @@ for (socket in connectionPool) {
 
 能否将这两个线程的功能做到一个线程中执行？答案是肯定的，核心原因是在NIO的系统调用过程中，`等待监听端口处于acceptable，等待socket连接处于readable/writable可以被注册至同一个Selector中`。这是EventLoop，Reactor模型以及多路事件分发器的先决条件。利用这一特性，工作线程可同时wait在accept以及read/write处，任一事件处于就绪状态都可唤醒线程。
 
-[multi-dispatch](../resources/img/multi-dispatch-1.png)
+![multi-dispatch](../resources/img/multi-dispatch-1.png)
 
 如上图所示，线程会在可以调用acceptable/readable/writable时得到提示，从阻塞状态重新进入可执行状态。程序中通常将触发线程从阻塞状态转到可运行状态的变化封装为一个Event，通过队列的方式将这些Event组织起来，并通过一个叫做dispatcher的组件派发至对应的handler进行处理。这样，利用一个简单的switch语句或者if/else语句就可以实现所有handler,dispatcher工作由同一个线程来驱动。(这里带有一点协程的思想：即使用状态机的方式在用户态实现任务的调度)
 
@@ -87,7 +87,7 @@ for (socket in connectionPool) {
 
 将线程池技术引入到单线程Reactor模型中可以迅速解决问题1：dispatcher分发任务时，将handler与event封装为task异步交给线程池处理（Doug Lea老爷子中的模型2）。从线程与数据的角度来看，任意一个Event到来后，它首先在dispatcher的线程中转了一圈，然后被分发至线程池中的工作线程执行后续操作。中间涉及到了：Task对象的创建、进出task队列时的锁、不同线程切换与调度等多个耗时操作，并不满足Reactor模型高性能的要求。更好的解决方案是直接将整个Reactor模型进行复制，让其在线程池中运行，利用锁等同步工具来解决并发导致的同步问题。如多个线程并发操作同一个连接导致的线程不安全问题。
 
-[multithread-reactor](../resources/img/multi-reactor.png)
+![multithread-reactor](../resources/img/multi-reactor.png)
 
 如上图所示，红色部分代表将事件处理的Handler放入线程池中执行的方案(Doug lea以及网上大多数博客的方案),绿色部分代表将handler与dispatcher一起放入线程池中的方案（Nginx多进程模式，Netty只设置了一个EventloopGroup时的模式均采用此方案）。个人认为：Doug Lea的nio PPT更倾向于向大家描述和介绍Reactor模型，与实际各个框架所使用的多线程Reactor模型存在一定差异。
 
