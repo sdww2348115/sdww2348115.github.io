@@ -1,0 +1,217 @@
+---
+layout: post
+title:  "Nginx"
+date:   2020-02-01 22:32:00 +0800
+categories: network nginx nio 
+permalink: /tools/Nginx
+description: 本文介绍了Nginx的功能以及特点，并简单分析了Nginx架构如何实现高性能、高可用以及高扩展性。
+---
+
+## Nginx 功能 & 特点
+Nginx 是一款`高性能`、`高可靠性`、`高扩展性`的反向代理软件，多作为网关被部署于边缘节点。
+
+* 高性能：借助于epoll模型，Nginx是目前性能最强的反向代理软件之一
+* 高可靠性：Nginx能够长时间运行而不宕机，运行时间可达数年甚至更多;借助于master-worker进程结构，Nginx可实现无缝升级、热部署
+* 高扩展性：Nginx采用模块化设计，用户可以很方便的开发自己的扩展模块，并利用回调函数在Nginx的worker启停、mater启停、载入配置文件完成后等生命周期关键节点处注入自定义逻辑；借由OpenResty以及lua模块，用户可以方便的使用lua脚本编写Nginx逻辑
+
+Nginx的主要功能有以下几点：
+
+* 反向代理：Nginx核心功能，可提供7层HTTP反向代理或者4层stream（tcp）反向代理功能
+* 静态资源服务器：由于轻量、简单，Nginx所提供的的静态资源访问功能相比tomcat等web-server速度更快，传输效率更高
+* api-server：借助lua脚本以及自定义模块，Nginx可以处理一些较为简单的HTTP请求
+
+## Nginx 典型使用方式及配置
+
+### 作为静态资源服务器
+Nginx通常被作为动静分离模式下静态资源服务器，其最大的优势在于两点：
+
+ * 相比Tomcat等Web服务器，性能是其最大的优势。Tomcat，jetty等web服务器由于为了方便开发，在请求处理的过程中会额外加入许多其他的逻辑，其整体性能相比Nginx要低得多。
+ * Nginx支持ZeroCopy,AIO等功能，对于静态文件而言的传输性能要高得多
+ * 在高性能的基础上，Nginx还支持gzip，unzip等多种静态文件相关功能
+ * 作为一个web服务器，Nginx可设置高效的缓存来加快请求访问效率
+
+example:
+``` bash
+http {
+    server {
+        listen 8080;
+        location / {
+        
+        # 1. ZeroCopy相关配置
+            # 当sendfile为on时，开启zero copy模式，数据流将从文件fd到socket 的fd，整个过程均在内核态完成
+            sendfile on; 
+            # 搭配sendfile参数配置，防止一个很快的连接在发送超大文件时长时间占用worker进程，最终导致其他task饿死
+            sendfile_max_chunk 1m;
+            
+        # Tips:使用sendfile的时候，操作系统的file cache将启动，文件将首先被读入file cache中，再进行zero copy。对于超大文件来说，file cache根本存放不下，导致大量缺页中断，反而拖慢系统速度；对于仅读取一次的文件而言，file cache完全是一个鸡肋功能。所以通常采用aio + directio的方式传输大文件。
+        # 2. Aio相关配置
+            # 开启此项后，nginx将使用aio的方式读取文件，需搭配directio使用
+            aio on;
+            # 当文件大小超过size时，采用directio的模式进行文件传输，buffer大小与size一致（如果同时开启sendfile，则小鱼buffersize的文件直接采用sendfile传输）
+            directio size|off;
+            root /usr/local/openresty/nginx/html;
+        }
+    }
+}
+```
+
+### 作为web-server使用
+通常而言，Nginx经常搭配lua，fastcgi等作为web-server使用。直接提供PHP，lua脚本解析与执行的功能。作为web-server使用时，Nginx通常具有`开发效率高`，`性能优秀`等特点。但需要注意的是：与其他eventloop框架类似，必须注意不要长时间阻塞工作进程，否则可能会导致部分进程进入饿死状态。
+
+``` bash
+http {
+    server {
+        listen 8080;
+        location / {
+            default_type text/html;
+            # 使用lua脚本语句块实现一些基本操作
+            content_by_lua '
+            ngx.say("User-Agent: ", ngx.req.get_headers()["User-Agent"])
+            ';
+        }
+    }
+}
+```
+
+除lua脚本外，Nginx还可以对接FastCGI等程序支持PHP等脚本语句。
+
+### 作为反向代理使用
+
+Nginx最核心的功能就是其反向代理功能，除7层Http协议外，Nginx还提供了4层tcp的反向代理功能。
+``` bash
+# Http反向代理
+http {
+    # 借用upstream，实际上也可直接写地址
+    upstream lua {
+        server 127.0.0.1:8080;
+    }
+    
+    server {
+       listen 80; 
+       location / {
+           proxy_pass http://lua;
+       }
+    }
+}
+
+# Tcp 反向代理 
+stream {
+    upstream lua {
+        server 127.0.0.1:8080;
+    }
+
+   server {
+       listen 80;
+       proxy_pass lua;
+   }
+}
+```
+
+## Nginx 工作原理
+本章将首先分析Nginx框架方面的高可用，高性能，高扩展性方面的设计原理；再细化分析主要业务的工作流程，以便使得读者对于Nginx有一个较为全面的了解。
+### Nginx进程模型（高可用）
+Nginx采用了主从多进程的模型，其中worker进程负责处理连接请求等具体工作，master进程不负责任何业务逻辑，仅提供worker进程的监控管理功能。
+
+![nginx-progress](../resources/img/nginx-progress.png)
+
+由于多个线程共享地址空间，当程序运行时出现与地址空间相关错误时，将导致多个线程同时崩溃；由于Nginx采用的是Re-actor进程模型，理论上不存在多线程/进程的调度工作，因此多线程所带来的减少系统调度开销优势并不存在。
+
+worker进程的生命周期受master进程控制，当worker进程意外终止时，master进程会重新拉起一个新的worker进程，并重新加入到worker进程集群中，整个过程对于用户来说基本无感知。借由该特性，Nginx可实现平滑reload以及热升级等功能。
+
+nginx重载config文件时，原有的worker进程将被优雅关闭，原有的连接也将被执行优雅关闭。
+
+* 对于HTTP连接：如果连接为短连接，处理完response后将被直接关闭；如果连接为keep-alive长连接，经过超时时间后连接将会断开
+* 对于stream连接：连接将长期存在。
+
+Nginx重载配置文件流程
+![nginx-reload](../resources/img/nginx-reload.png)
+
+
+Nginx热升级流程
+![nginx-upgrade](../resources/img/nginx-upgrade.png)
+
+
+### Nginx网络通信模型（高性能）
+Nginx最核心的优点在于其高并发下的性能优势，单台服务器可以同时维持数十万甚至数百万TCP连接，远远大于同类竞品apache等web服务器，其中最关键的核心在于采用nio网络连接以及配套的事件驱动模型（eventloop）。
+
+详情请见[从BIO到Reactor](../../io/Reactor)
+
+### Nginx代码结构与工作流程（可扩展性）
+Nginx的可扩展性源自其优良的设计：模块/组件化。Nginx整个系统都是由一个个模块组装起来的，在Nginx的框架代码中定义了Nginx模块的结构。Nginx的几乎所有功能都是由其模块实现的，所以在编译安装的时候，可以根据不同的需求，针对性地选择/排除模块。同样的，我们不需要对Nginx的源码做过于深入的了解，只需要按照说明文档一步一步进行操作即可方便的编写自定义模块。
+
+![nginx-modules](../resources/img/nginx-modules.JPG)
+除模块化外，在模块的设计时，Nginx还预留了许多钩子函数，提供了自定义模块将逻辑注入程序启动、请求处理流程的能力。以程序启动为例，在我们编写自定义模块的时候，可以在模块中指定程序启动时需要执行的逻辑、进程启动是需要执行的逻辑以及模块初始化时需要执行的逻辑等，以函数指针的方式注入到程序主流程中执行。同理，在HTTP模块中，Nginx一共要经历11个步骤，其中7个步骤都可以通过注册回调函数的方式向其中注入我们需要的业务逻辑，实现类似于AOP的效果。
+
+Nginx的抽象设计层次较高，很好的实现了接口与实现分离的原则。以Nginx启动worker进程为例，Nginx在框架层仅规定了worker进程工作方式为eventloop，其核心工作函数ngx_process_events在event模块中仅仅是一个函数指针，相当于预留的接口。在编译的过程中，用户将手动指定编译的事件模块，才会将对应的实现函数添加至程序逻辑中，在C语言中实现了静态分派的思想。
+
+### Nginx Stream反向代理核心逻辑
+### Nginx HTTP反向代理核心逻辑(TBC)
+## Nginx 性能优化
+
+## 附录
+### linux常用内核优化参数
+/etc/sysctl.conf
+> fs.file-max = 999999 
+这个参数表示进程（比如一个worker进程）可以同时打开的最大句柄数，这个参数直接限制最大并发连接数，需根据实际情况配置。
+
+> net.ipv4.tcp_tw_reuse = 1 
+这个参数设置为1，表示允许将TIME-WAIT状态的socket重新用于新的TCP连接，这对于服务器来说很有意义，因为服务器上总会有大量TIME-WAIT状态的连接。
+
+> net.ipv4.tcp_keepalive_time = 600 这个参数表示当keepalive启用时，TCP发送keepalive消息的频度。默认是2小时，若将其设置得小一些，可以更快地清理无效的连接。
+
+> net.ipv4.tcp_fin_timeout = 30 
+这个参数表示当服务器主动关闭连接时，socket保持在FIN-WAIT-2状态的最大时间。
+
+> net.ipv4.tcp_max_tw_buckets = 5000
+这个参数表示操作系统允许TIME_WAIT套接字数量的最大值，如果超过这个数字，TIME_WAIT套接字将立刻被清除并打印警告信息。该参数默认为180000，过多的TIME_WAIT套接字会使Web服务器变慢。
+
+> net.ipv4.ip_local_port_range = 1024 61000
+这个参数定义了在UDP和TCP连接中本地（不包括连接的远端）端口的取值范围。
+
+> net.ipv4.tcp_rmem = 4096 32768 262142
+这个参数定义了TCP接收缓存（用于TCP接收滑动窗口）的最小值、默认值、最大值。
+
+> net.ipv4.tcp_wmem = 4096 32768 262142
+这个参数定义了TCP发送缓存（用于TCP发送滑动窗口）的最小值、默认值、最大值。
+
+> net.core.netdev_max_backlog = 8096
+当网卡接收数据包的速度大于内核处理的速度时，会有一个队列保存这些数据包。这个参数表示该队列的最大值。
+
+> net.core.rmem_default = 262144
+这个参数表示内核套接字接收缓存区默认的大小。
+
+> net.core.wmem_default = 262144
+这个参数表示内核套接字发送缓存区默认的大小。
+
+> net.core.rmem_max = 2097152
+这个参数表示内核套接字接收缓存区的最大大小。
+
+> net.core.wmem_max = 2097152
+这个参数表示内核套接字发送缓存区的最大大小。
+
+> 注：滑动窗口的大小与套接字缓存区会在一定程度上影响并发连接的数目。每个
+TCP连接都会为维护TCP滑动窗口而消耗内存，这个窗口会根据服务器的处理速度收缩或扩
+张。
+参数wmem_max的设置，需要平衡物理内存的总大小、Nginx并发处理的最大连接数量
+（由nginx.conf中的worker_processes和worker_connections参数决定）而确定。当然，如果仅仅
+为了提高并发量使服务器不出现Out Of Memory问题而去降低滑动窗口大小，那么并不合
+适，因为滑动窗口过小会影响大数据量的传输速度。rmem_default、wmem_default、
+rmem_max、wmem_max这4个参数的设置需要根据我们的业务特性以及实际的硬件成本来综
+合考虑。
+
+> net.ipv4.tcp_syncookies = 1
+该参数与性能无关，用于解决TCP的SYN攻击。
+
+> net.ipv4.tcp_max_syn.backlog=1024
+这个参数表示TCP三次握手建立阶段接收SYN请求队列的最大长度，默认为1024
+
+### Nginx信号量及对应操作
+|信号|接收进程|说明|
+|:-|:-|:-|
+|TERM, INT|master/worker|直接退出|
+|QUIT|master/worker|优雅退出（完成当前任务后再退出）|
+|USR1|master/worker|重新打开日志文件|
+|WINCH|master|使所有worker进程优雅退出|
+|HUP|master|重载配置文件|
+|USR2|master|热升级|
+
