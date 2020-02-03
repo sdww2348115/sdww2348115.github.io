@@ -1,0 +1,37 @@
+---
+layout: post
+title:  "Nginx"
+date:   2020-02-03 23:20:00 +0800
+categories: network nginx iptables
+permalink: /tmp/iptables-nginx
+description: 本文介绍了Nginx的功能以及特点，并简单分析了Nginx架构如何实现高性能、高可用以及高扩展性。
+---
+
+相比于iptables，使用Nginx作为网关主要有以下几个方面不足：
+
+1. 工作于TCP层，转发效率不高
+2. 任何新增/删除端口的操作，都需要重新构建nginx.conf配置文件，并执行nginx -s reload重启所有broker
+
+
+## TCP层转发 vs. IP层转发
+
+如下图所示，TCP层代理在转发数据时需要维持两个连接：`client->proxy的tcp连接`以及`proxy->server的连接`，当client端有数据到来时，Nginx需要将数据从内核缓冲区中拷贝至预置的buffer中，再将buffer中的数据塞到与server端连接的内核缓冲区中。相比iptables数据转发，Nginx转发会多一次数据拷贝，并使得程序多次在内核态/用户态切换，因此整体效率相比iptables转发要低。
+![nginx-iptables](https://sdww2348115.github.io/resources/img/nginx-iptables.png)
+
+我做了一个简单的测试，Client端分别通过iptables的网关以及Nginx的网关向服务发送数据，发送1GB数据的耗时分别为:
+
+* 使用Nginx作为网关,总耗时为42522ms
+* 使用iptables作为网关,总耗时为30749ms
+
+除数据转发耗时较长以外，由于Nginx创建了两个连接，因此随着连接的增多，承载Nginx的服务器的`内存`和`文件描述符`资源也会随之增加。其中：
+
+* 文件描述符资源需要放开ulimit限制
+* 每10000个链接约增加200MB内存消耗
+
+## nginx -s reload 带来的问题
+ngins -s reload 流程如下：
+
+![nginx-reload](https://sdww2348115.github.io/resources/img/reload.JPG)
+
+虽然spice协议通信大多都是长连接，但是客户使用场景下通常会出现批量启动的情况，此时nginx -s reload命令将在短时间内多次被执行。nginx.conf文件的反复修改/读取，工作线程的创建/销毁/调度都会占用大量CPU资源，由于Nginx本身进行转发也非常依赖CPU在内存缓冲区与用户区之间进行数据拷贝，整个系统在`批量启动/重启`的过程中可能会导致网络通信不稳定的情况产生。
+
