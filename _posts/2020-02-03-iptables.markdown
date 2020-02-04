@@ -1,10 +1,10 @@
 ---
 layout: post
-title:  "Nginx"
+title:  "nginx与iptables作为网络连接代理的简单区别"
 date:   2020-02-03 23:20:00 +0800
 categories: network nginx iptables
 permalink: /tmp/iptables-nginx
-description: 本文介绍了Nginx的功能以及特点，并简单分析了Nginx架构如何实现高性能、高可用以及高扩展性。
+description: 简单比较了nginx与iptables作为网络连接代理的优劣
 ---
 
 相比于iptables，使用Nginx作为网关主要有以下几个方面不足：
