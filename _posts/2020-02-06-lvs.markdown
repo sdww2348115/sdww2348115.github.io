@@ -1,0 +1,67 @@
+---
+layout: post
+title:  "LVS简介"
+date:   2020-02-06 23:30:00 +0800
+categories: network gateway loadbalance 
+permalink: /network/lvs
+description: 简单介绍LVS作用、诞生背景、工作原理以及配置方式
+---
+
+## 背景与功能
+LVS全称为Linux Virtual Server，是国内常见的Load-Balance工具软件。除了能够在常见的UDP，TCP等OIS-4层协议上实现LB外，它也能为提供FTP、HTTP等典型应用层协议提供LB功能。
+
+相比F5等硬件Load-Balance工具，它不需要专门的硬件工具；对比于Nginx等代理，LVS所有工作都在内核态运行，不涉及数据拷贝和内核态/用户态切换，性能是其最大的优势。
+
+LVS的核心包括IPVS模块、KTCPVS模块以及一些其他集群管理模块：
+
+ * IPVS:一款基于IP、端口的报文转发工具，已经被集成至Linux内核之中。
+ * KTCPVS:提供应用层流量转发功能。
+
+因为其性能的优异性，目前使用最多的便是基于IPVS构建的LVS系统。本文主要阐述IPVS系统的原理以及LVS系统基本搭建方式。
+
+## IPVS系统原理
+
+### netfilter/iptables简介
+netfilter/iptables属于Linux内核的一部分，它提供了一整套API可供用户自定义对于IP报文的处理方式，用户可以通过这一模块自由组合IP报文的处理方式，实现Linux防火墙功能。
+
+![iptables-chain](https://sdww2348115.github.io/resources/img/iptables-chain.png)
+
+数据包在netfilter/iptables中的流转如上图所示，一共有6个阶段用户可以通过注册回调函数的方式对数据包进行处理。每一个阶段都有对应的链表用于存储所有规则，IP报文将根据链表顺序依次经过每一个规则。因此，在不丢弃数据包的情况下，一个用于转发的ip报文将根据上图依次流经PreRouting、Forward、PostRouting，经过所有规则处理后再流转出去。
+
+随着业务的增加，iptables对于报文处理的链条可能会变得很长，为了便于组织，iptables根据规则的用途对其进行了聚类。所有规则都根据自身通途被放到了4个table中，这也就是名称中table的由来。
+
+|表名|功能|涉及阶段|
+|--|--|--|
+|Filter(Default)|过滤IP报文|FORWARD、INPUT、OUTPUT|
+|Nat|转发IP报文|PREROUTING、POSTROUTING、OUTPUT|
+|Mangle|对IP报文进行修改和处理|PREROUTING、POSTROUTING、INPUT、OUTPUT、FORWARD|
+|Raw(后续加入)|决定数据包是否被跟踪机制处理|OUTPUT、PREROUTING|
+
+IP报文在整个netfilter/iptables模块流转如下图
+
+![iptables-full-chain](https://sdww2348115.github.io/resources/img/iptables-full-chain.jpg)
+
+### iptables的不足
+随着路由规则的逐渐增多，iptables会慢慢显现出它的先天不足：由于iptables采用链表来组织规则列表，每个IP报文将流经链表中每一项的处理，即使对其产生作用的只有一项或很少的几项。最典型的例子便是用作网关路由转发，如果集群内部存在成千上万的服务端口需要在网关server的iptables上配置路由转发规则，那么网关server的iptables chain将到达数千甚至数万的长度，任何IP通过iptables时都会在每个规则处判断一次，但是其中只有一条规则是用来处理该IP报文的。因此，`iptables在大规模集群的情况下转发IP报文的效率不够高`。
+
+iptables引入了ipset来解决IP报文的匹配问题。简单来说，用户可以通过ipset创建一个包含ip或者端口的集合，然后以这个集合作为iptables规则链的判断条件，如果IP报文满足ipset条件，iptables则执行对应的操作。通过引入Set这一数据结构，iptables可以将match操作的时间复杂度从O(N)变为O(1)。但是ipset常用于Filter模块，无法用于Nat转发模块。
+
+作为一个防火墙模块，iptables对于IP报文的处理相对简单，缺乏轮询，加权轮询，最短连接等负载均衡算法的支持。
+
+### IPVS
+
+IPVS通过向INPUT阶段的规则链中注册回调函数，解决iptables/netfilter模块上述两个缺点，从而实现高效率、功能完备的LoadBalance功能。
+
+![IPVS](https://sdww2348115.github.io/resources/img/ipvs.jpg)
+
+* 当用户访问www.sina.com.cn时，DNS会将此域名解析为一个Virtual IP，指向LVS server
+* 数据包进入Server后，通过物理层、数据链路层等层层递进，达到iptables模块中
+* 进入PREROUTING后，Server发现报文中的VIP指向本机，于是将这个报文丢入INPUT chain中
+* 当IP报文进入IPVS处理逻辑时，IPVS首先会根据VIP+Port判断此数据包是否需要进行转发，经过确认后将根据预设算法选出对该数据包进行实际处理的RealServer，随后将数据包进行修改，不经过应用程序以及OUTPUT链，直接丢入POSTROUTING中
+* POSTROUTING收到数据包后将根据数据包的信息通过路由选路，最终将数据包发到选中的RealServer上。
+
+根据路由转发规则的不同，开源LVS有三种工作模式，分别适用于不同场景：
+
+* DirectRouting 模式
+* NAT 模式
+* Tunnel 模式
