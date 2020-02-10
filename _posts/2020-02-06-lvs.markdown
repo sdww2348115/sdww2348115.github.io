@@ -65,3 +65,36 @@ IPVS通过向INPUT阶段的规则链中注册回调函数，解决iptables/netfi
 * DirectRouting 模式
 * NAT 模式
 * Tunnel 模式
+
+### DR模式
+
+![lvs-dr](https://sdww2348115.github.io/resources/img/lvs-dr.png)
+
+如上图所示，lvs-DR模式工作原理如下
+
+1. 数据包从客户端处经过层层转发至LVS-Server处，此时数据包的源IP为客户端IP地址，目的IP为LVS-Server服务器IP地址，源MAC地址为路由器MAC地址，目的MAC地址为LVS-Server的MAC地址。
+2. LVS-Server对发向虚IP的数据包做一定处理：根据负载均衡算法得到一个真正负载请求的RealServer，并 将数据包的目标MAC地址变为RealServer的MAC地址，并将数据包发给RealServer。此时数据包的源IP地址与目的IP地址都未修改，源MAC地址变为LVS-Server与RealServer相通网卡的MAC地址，目的MAC地址变为RealServer的MAC地址。
+3. RealServer接收并处理请求，回应将被直接发送给Client。具体IP与MAC情况请见上图。
+
+DR模式的核心原理便是通过修改IP报文MAC地址，使请求报文根据负载均衡算法将请求分摊至多个RealServer上。
+DR模式最大的优点便是性能高:所有的响应数据由RealServer直接返回给Client，整个系统最大的瓶颈LVS-Server只需要处理请求数据，而且通常来说请求的数据是远小于响应数据的，使用DR模式的LVS系统整体性能最优。
+由于数据转发是通过修改MAC地址实现，因此LVS-DR模式最大的缺点在于限制了LVS-Server必须与RealServer处于同一交换机环境中。
+
+### NAT模式
+
+LVS的NAT模式可以简单认为就是iptables路有规则的增强版，其完全运行于ip层之上，通过修改源IP与目的IP的方式实现负载均衡转发。最关键的改进在于查找路由规则时将iptables原本O(n)的链式判断变为了Map O(1)级别，加快了转发的效率。
+
+> NAT 模式双向流量都经过 LVS，因此 NAT 模式性能会存在一定的瓶颈。不过与其它模式区别的是，NAT 支持端口映射，且支持 windows 操作系统。
+
+### Tunnel模式
+
+Tunnel模式结合了NAT模式与DR模式的优点，通过在IP报文外面再包裹一层的方式使得转发突破了DR模式下只能同一物理网络部署的限制，同时可以实现NAT模式的端口转发功能；由于响应报文不会再次经过LVS服务器，因此Tunnel模式理论上可以达到接近DR的性能水平。
+
+> Tunnel 模式具备 DR 模式的高性能，又支持跨机房访问，听起来比较完美了。不过国内运营商有一定特色性，比如 RS 的响应数据包的源 IP 为 VIP，VIP 与后端服务器有可能存在跨运营商的情况，有可能被运营商的策略封掉。Tunnel 在生产环境确实没有使用过，在国内推行 Tunnel 可能会有一定的难度。
+
+## keepalived
+
+作为与LVS搭配使用的组件，keepalived保证了LVS系统下的高可用性：
+
+1. 后端多台RS的故障嗅探，实时从集群中移除无法正常工作的RS，待其正常后再次加入负载均衡集群
+2. LVS服务器本身的高可用性
