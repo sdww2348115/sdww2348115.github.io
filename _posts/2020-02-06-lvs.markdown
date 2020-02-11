@@ -96,5 +96,15 @@ Tunnel模式结合了NAT模式与DR模式的优点，通过在IP报文外面再�
 
 作为与LVS搭配使用的组件，keepalived保证了LVS系统下的高可用性：
 
-1. 后端多台RS的故障嗅探，实时从集群中移除无法正常工作的RS，待其正常后再次加入负载均衡集群
-2. LVS服务器本身的高可用性
+1.LVS 服务器本身的高可用性
+2.后端多台RS的故障嗅探，实时从集群中移除无法正常工作的RS，待其正常后再次加入负载均衡集群
+
+### VRRP
+keepalived服务器本身的高可用性是通过VRRP协议实现的：一组高可用服务器将被划分至同一个虚拟广播网段中，该网段可通过`vrid`进行区分，且通过认证协议进行身份校验。一组高可用服务器中只会存在一个MASTER节点，其他都是冗余BACKUP节点，每个节点有两个关键值，分别是`priority`以及`state`，当多台服务器都处于正常工作状态时，总是`priority`以MASTER身份工作，如果两台及以上服务器的`priority`相同，则根据state预设值进行区分。集群中的Master节点会不断向所有节点发送广播表明自己存活，当BACKUP节点一段时间没有收到MASTER节点的广播时，则认为MASTER已经失效了，于是按照预设规则进行选举，另起一个新的Master。
+
+当MASTER恢复后，又会通过广播接管整个集群，如下图所示
+![keepavlived-master-recovery]![lvs-dr](https://sdww2348115.github.io/resources/img/keepalived-master-recovery.JPG)
+
+### 故障嗅探
+
+keepalived的RS故障嗅探功能与其他网关基本一致，通过轮询的方式验证下游服务是否存活，并动态移除非活跃服务/增加活跃服务。它提供的嗅探方式包括：`TCP`,`HTTP`,`SSL`,`MISC`。
