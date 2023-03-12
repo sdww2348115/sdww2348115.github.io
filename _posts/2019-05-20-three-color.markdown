@@ -19,22 +19,22 @@ description: 介绍垃圾回收中常见的三色标记法
 
 首先将所有的根对象标记为灰色并入栈，出栈时将其所有直接子节点标记为灰色并入栈，待其所有子节点都入栈之后，将其颜色置为黑色。
 
-[three-color-1](../../resources/img/MixGC-1.png)
+![three-color-1](../../resources/img/MixGC-1.png)
 
 对于每一个扫描栈中的灰色对象，重复上述步骤
 
-[three-color-2](../../resources/img/MixGC-2.png)
+![three-color-2](../../resources/img/MixGC-2.png)
 
 当扫描栈中没有任何对象存在时，整个内存对象引用图也就没有了灰色对象存在，此时图中只剩下黑白二色节点。所有可达节点均为黑色，不可达节点为白色。
 
-[three-color-3](../../resources/img/MixGC-3.png)
+![three-color-3](../../resources/img/MixGC-3.png)
 
 ## 并发时会遇到的问题
 纯粹的三色标记法只能在对象引用图没有修改的情况下才能正确工作，如果在标记对象的同时其他工作线程也在不断修改对象引用之间的关系，三色标记法就可能会出现标记错误。例如：
 
 此时root对象与A对象已完成标记，B对象正在标记的过程中，如下图所示：
 
-[error-1](../../resources/img/MixGC-4.png)
+![error-1](../../resources/img/MixGC-4.png)
 
 此时程序执行以下代码：
 ``` java
@@ -43,10 +43,10 @@ B.sub = null;
 ```
 此时B与C的引用关系被破坏，C与A之间建立新的引用关系，对象关系图变为如下模式：
 
-[error-2](../../resources/img/MixGC-5.png)
+![error-2](../../resources/img/MixGC-5.png)
 
 由于A已经被标记为黑色，GC线程扫描到的时候不会再继续去标记其子节点，当整个标记过程完成后对象关系图的结果如下：
 
-[error-3](../../resources/img/MixGC-6.png)
+![error-3](../../resources/img/MixGC-6.png)
 
 此时C将被误判为不可达对象，从而被垃圾回收掉，造成比较严重的后果。对于这样的并发问题，GC算法必须做额外处理以保证存活对象不会被误删，参考Incremental update 与 SATB。
